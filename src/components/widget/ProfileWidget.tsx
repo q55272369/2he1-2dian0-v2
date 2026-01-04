@@ -34,137 +34,93 @@ const LinkIcon = ({ icon, hasId }: { icon: string; hasId: boolean }) => {
   if (isValidUrl(icon) || icon.startsWith('/')) {
     return (
       <img
-        className="aspect-sqaure"
-        height={iconSize}
-        width={iconSize}
+        className="aspect-square w-5 h-5 lg:w-8 lg:h-8 drop-shadow-sm"
         src={icon}
-        alt={'social-logo'}
+        alt="icon"
       />
     )
   }
   return (
-    <DynamicIcon
-      nameIcon={icon}
-      propsIcon={{
-        size: iconSize,
-      }}
-    />
+    <div className="drop-shadow-sm">
+      <DynamicIcon
+        nameIcon={icon}
+        propsIcon={{
+          size: iconSize,
+        }}
+      />
+    </div>
   )
 }
 
-export const ProfileWidget = ({ data }: { data: ProfileWidgetType }) => {
+// ⬇️ 新增：定义品牌颜色的辅助函数
+const getBrandGradient = (url: string, iconName: string): string => {
+  const target = (url + iconName).toLowerCase();
+  
+  if (target.includes('github')) return 'linear-gradient(135deg, #2b3137 0%, #24292e 100%)'; // GitHub 黑
+  if (target.includes('twitter') || target.includes('x.com')) return 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)'; // X/Twitter 黑
+  if (target.includes('mail') || target.includes('email')) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'; // 邮件 黄
+  if (target.includes('linkedin')) return 'linear-gradient(135deg, #0077b5 0%, #005582 100%)'; // LinkedIn 蓝
+  if (target.includes('bilibili')) return 'linear-gradient(135deg, #00a1d6 0%, #008bb5 100%)'; // B站 蓝
+  if (target.includes('instagram')) return 'linear-gradient(135deg, #833ab4 0%, #fd1d1d 50%, #fcb045 100%)'; // INS 彩色
+  if (target.includes('rss')) return 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'; // RSS 橙色
+
+  // 默认兜底颜色（如果不匹配上面的，显示默认深灰色）
+  return 'linear-gradient(135deg, #525252 0%, #404040 100%)';
+}
+
+export const ProfileWidget = ({ config }: { config: ProfileWidgetType }) => {
+  const { isMobile, isTablet, isDesktop, isWidescreen } = useScreenSize()
+
   return (
     <WidgetContainer>
-      <div className="w-full h-full">
-        <div className="flex h-[72%] w-full flex-col items-start overflow-hidden px-3.5 pt-3.5 md:h-3/5 md:flex-row md:items-center md:justify-start md:space-x-3 md:px-3 md:py-2.5 lg:space-x-4 lg:px-5 lg:py-4">
-          <div className="h-full overflow-hidden rotate-0 aspect-square rounded-2xl sm:mb-0 md:rounded-full">
+      <div className="flex flex-col gap-5 lg:gap-10">
+        {/* 头像区域 */}
+        <div className="relative group w-fit mx-auto">
+          <div className="absolute -inset-1 bg-gradient-to-r from-pink-600 to-purple-600 rounded-full blur opacity-50 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
+          <div className="relative aspect-square w-24 h-24 lg:w-32 lg:h-32 rounded-full ring-4 ring-neutral-100 dark:ring-neutral-800 overflow-hidden shadow-xl">
             <ImageWithPlaceholder
-              src={data.logo.src}
-              width={data.logo.info.width}
-              height={data.logo.info.height}
-              blurDataURL={data.logo.info.placeholder}
-              alt="portrait"
-              className="overflow-hidden rounded-2xl md:rounded-full"
+              src={config.avatar}
+              alt="avatar"
+              fill={true}
+              containerClassName="w-full h-full"
+              className="object-cover"
             />
           </div>
-          <div className="mt-2 flex flex-col justify-between gap-0.5 text-black dark:text-white md:mt-0">
-            <h1 className="mb-2 text-base font-semibold tracking-tighter line-clamp-1 sm:mb-3 sm:text-base sm:tracking-normal md:mb-0 md:text-xl md:font-medium lg:text-2xl">
-              {data.name}
-            </h1>
-            <h2 className="hidden text-sm md:line-clamp-1 lg:text-sm">
-              {data.description}
-            </h2>
-          </div>
         </div>
-        <div
-          className={classNames(
-            'h-[28%] w-full md:h-2/5',
-            'md:bg-neutral-100 md:dark:bg-neutral-800'
-          )}
-        >
-          <div className="scrollbar-hide flex h-full w-full flex-row items-center justify-center  overflow-scroll px-3.5 pt-1 pb-3 font-medium md:justify-center md:gap-x-1  md:py-2 lg:px-5 lg:py-3 lg:text-sm">
-            {/* {data.links.map((link, index) => (
-              console.log(link,"-------------------")
-             
-            ))} */}
-             <Link
-                key={'aaa'}
-                href={'/about'}
-                // target="_blank"
-                rel="noopener noreferrer"
-                className={classNames(
-                  'leading-0 w-full transform cursor-pointer items-center justify-center rounded-lg text-white transition duration-300 ease-in-out hover:scale-95 md:h-full md:w-auto md:rounded-xl lg:rounded-2xl',
-                  true
-                    ? 'aspect-square md:aspect-auto md:gap-x-0.5 md:px-1.5 lg:gap-x-1.5 lg:px-3'
-                    : 'aspect-square',
-                  'bg-gradient-to-tr',
-                  'from-neutral-300 dark:from-neutral-700',
-                  'to-neutral-200 dark:to-neutral-600',
-                   'flex'
-                )}
-                style={{
-                  backgroundImage: 'linear-gradient(to top right, #b80ce4, #2c16ab) !important',
-                }}
-              >
-                <LinkIcon icon={'FaCrown'} hasId={!!true} />
-                <p className="hidden md:block md:text-xs lg:text-base">
-                  {'入会说明'}
-                </p>
-                <span></span>
-              </Link>
 
+        {/* 社交按钮区域 */}
+        <div className="flex flex-row justify-center items-center gap-2 lg:gap-4">
+          {config.links.map((item, index) => {
+            // 获取对应的渐变色样式
+            const backgroundStyle = getBrandGradient(item.url, item.icon);
+
+            return (
               <Link
-                key={'bbb'}
-                href={'/download'}
-                // target="_blank"
-                rel="noopener noreferrer"
+                key={index}
+                href={item.url}
+                target="_blank"
+                // ⬇️ 修复点1：移除 className 中冲突的 gray/neutral 颜色类
                 className={classNames(
-                  'leading-0 w-full transform cursor-pointer items-center justify-center rounded-lg text-white transition duration-300 ease-in-out hover:scale-95 md:h-full md:w-auto md:rounded-xl lg:rounded-2xl',
-                  true
-                    ? 'aspect-square md:aspect-auto md:gap-x-0.5 md:px-1.5 lg:gap-x-1.5 lg:px-3'
-                    : 'aspect-square',
-                  'bg-gradient-to-tr',
-                  'from-neutral-300 dark:from-neutral-700',
-                  'to-neutral-200 dark:to-neutral-600',
-                   'flex'
+                  'flex items-center justify-center',
+                  'rounded-2xl lg:rounded-3xl',
+                  'shadow-lg shadow-neutral-300 dark:shadow-neutral-900', // 保留阴影
+                  'text-white', // 强制图标变白
+                  'transition-all duration-300 ease-in-out',
+                  'hover:scale-110 hover:-translate-y-1',
+                  isMobile || isTablet ? 'w-8 h-8' : '',
+                  isDesktop ? (config.id ? 'w-8 h-8' : 'w-10 h-10') : '',
+                  isWidescreen ? (config.id ? 'w-10 h-10' : 'w-12 h-12') : ''
                 )}
+                // ⬇️ 修复点2：通过 style 强制应用背景色，且不加 !important
                 style={{
-                  backgroundImage: 'linear-gradient(to top right, #eb9b34, #f0a94d) !important',
+                  background: backgroundStyle, 
+                  border: '1px solid rgba(255,255,255,0.1)' // 增加一点质感
                 }}
               >
-                <LinkIcon icon={'IoMdCloudDownload'} hasId={!!true} />
-                <p className="hidden md:block md:text-xs lg:text-base">
-                  {'下载说明'}
-                </p>
-                <span></span>
+                <LinkIcon icon={item.icon} hasId={!!config.id} />
               </Link>
-
-               <Link
-                key={'ccc'}
-                href={'/friends'}
-                // target="_blank"
-                rel="noopener noreferrer"
-                className={classNames(
-                  'leading-0 w-full transform cursor-pointer items-center justify-center rounded-lg text-white transition duration-300 ease-in-out hover:scale-95 md:h-full md:w-auto md:rounded-xl lg:rounded-2xl',
-                  true
-                    ? 'aspect-square md:aspect-auto md:gap-x-0.5 md:px-1.5 lg:gap-x-1.5 lg:px-3'
-                    : 'aspect-square',
-                  'bg-gradient-to-tr',
-                  'from-neutral-300 dark:from-neutral-700',
-                  'to-neutral-200 dark:to-neutral-600',
-                   'flex'
-                )}
-                style={{
-                  backgroundImage: 'linear-gradient(to top right, #0a69c6, #0088fa) !important',
-                }}
-              >
-                <LinkIcon icon={'HiOutlineViewGridAdd'} hasId={!!true} />
-                <p className="hidden md:block md:text-xs lg:text-base">
-                  {'更多资源'}
-                </p>
-                <span></span>
-              </Link>
-          </div>
+            )
+          })}
         </div>
       </div>
     </WidgetContainer>
