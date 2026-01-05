@@ -37,32 +37,54 @@ export const EncryptedCallout = ({ block, children }: { block: any; children: an
     }
   };
 
-  // 🎨 预处理 Block
+  // 🎨 预处理 Block (解锁后)
   const cleanBlock = {
     ...block,
-    callout: { ...block.callout, rich_text: [] }
+    callout: {
+      ...block.callout,
+      rich_text: [], // 清空标题文字
+      icon: null     // 🚫 关键优化：清空图标，防止占据顶部空间
+    }
   };
 
+  // ✂️ 内容裁切逻辑 (核心优化)
+  // 如果已解锁，我们移除第一个子元素（即那条分割线）
+  // 这样就能完美消除分割线带来的横线和上下间距
+  const childrenArray = React.Children.toArray(children);
+  const unlockedContent = isUnlocked && childrenArray.length > 0 
+      ? childrenArray.slice(1) // 切掉第一个(分割线)
+      : childrenArray;
+
   return (
-    // 外层容器：控制圆角和阴影
     <div 
         ref={containerRef}
-        className="relative my-8 rounded-2xl shadow-2xl group border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-black transition-all duration-500 ease-in-out"
+        className={`
+            relative my-8 rounded-2xl shadow-2xl group border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-black transition-all duration-500 ease-in-out
+            ${isUnlocked ? 'border-none shadow-none bg-transparent' : ''} 
+        `}
     >
       
       {/* =========================================================
-          关键修改：高度控制层
-          1. 锁定状态：限制最大高度 max-h-[450px] 并隐藏溢出 overflow-hidden
-          2. 解锁状态：max-h-full (无限制)，显示全部
+          内容层
+          1. 锁定状态：限制高度，模糊
+          2. 解锁状态：无限制，清除 padding
       ========================================================= */}
       <div 
         className={`
           relative w-full transition-all duration-700 ease-in-out
           ${isUnlocked ? 'max-h-full opacity-100' : 'max-h-[450px] overflow-hidden'}
+          
+          /* 🔧 关键 CSS 修正：
+             当解锁后，强制移除 Callout 内部默认的 padding，
+             让内容直接顶格显示，消除留白。
+          */
+          [&_.notion-callout]:!p-0
+          [&_.notion-callout]:!bg-transparent
+          [&_.notion-callout]:!border-none
+          [&_.notion-callout]:!m-0
         `}
       >
         
-        {/* 内容层：模糊处理 */}
         <div 
             className={`
                 h-full w-full
@@ -70,11 +92,12 @@ export const EncryptedCallout = ({ block, children }: { block: any; children: an
             `}
         >
             <Callout block={cleanBlock}>
-                {children}
+                {/* 传入处理过的内容（去掉了分割线） */}
+                {unlockedContent}
             </Callout>
         </div>
 
-        {/* 覆盖层：未解锁时，给底部加一个渐变遮罩，让截断更自然 */}
+        {/* 覆盖层：未解锁时的底部遮罩 */}
         {!isUnlocked && (
              <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white dark:from-[#121212] to-transparent z-10"></div>
         )}
@@ -83,21 +106,17 @@ export const EncryptedCallout = ({ block, children }: { block: any; children: an
 
 
       {/* =========================================================
-          锁界面 UI 层 (Overlay)
-          使用 absolute inset-0 居中显示在限制了高度的容器内
+          锁界面 UI (Overlay)
       ========================================================= */}
       {!isUnlocked && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-4">
-          
           <div className="relative z-30 flex flex-col items-center w-full max-w-sm p-6 rounded-2xl bg-white/10 dark:bg-black/20 backdrop-blur-md border border-white/20 dark:border-white/10 shadow-lg">
-            
             <h3 className="font-extrabold text-2xl mb-2 text-neutral-900 dark:text-white drop-shadow-md">
               受保护的内容
             </h3>
             <p className="text-sm text-neutral-600 dark:text-neutral-300 mb-6 font-medium text-center">
-              请输入密码查看完整内容。
+              内容已隐藏，请输入密码查看。
             </p>
-
             <div className="w-full flex flex-col gap-3">
               <input 
                 type="password" 
@@ -120,7 +139,6 @@ export const EncryptedCallout = ({ block, children }: { block: any; children: an
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
               />
-
               <button 
                 onClick={handleUnlock}
                 className={`
@@ -132,11 +150,9 @@ export const EncryptedCallout = ({ block, children }: { block: any; children: an
                   transition-all duration-100
                 `}
               >
-                解锁全部内容
+                解锁
               </button>
             </div>
-
-            {/* 错误提示 */}
             <div className={`
               mt-3 px-3 py-1 rounded-full text-xs font-bold text-red-600 bg-red-100/90 backdrop-blur-sm
               transition-all duration-300 transform
@@ -144,26 +160,24 @@ export const EncryptedCallout = ({ block, children }: { block: any; children: an
             `}>
               密码错误
             </div>
-
           </div>
         </div>
       )}
 
       {/* 解锁后的控制按钮 */}
       {isUnlocked && (
-        <div className="absolute top-2 right-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="absolute top-0 right-0 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
            <button 
              onClick={() => {
                localStorage.removeItem(`unlocked-${block.id}`);
                setIsUnlocked(false);
-               // 重新上锁时滚动回顶部，体验更好
                if (containerRef.current) {
                    containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
                }
              }}
-             className="text-xs bg-black/5 dark:bg-white/10 hover:bg-neutral-800 hover:text-white px-3 py-1.5 rounded backdrop-blur-md text-neutral-500 transition-colors"
+             className="text-xs bg-neutral-100 dark:bg-neutral-800 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-bl-xl text-neutral-500 transition-colors shadow-sm"
            >
-             🔒 锁定折叠
+             🔒 重新锁定
            </button>
         </div>
       )}
