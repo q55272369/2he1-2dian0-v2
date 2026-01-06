@@ -22,6 +22,7 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
     setTimeout(() => setIsCopied(false), 2000)
   }
 
+  // 禁止背景滚动
   useEffect(() => {
     if (showModal) {
       document.body.style.overflow = 'hidden'
@@ -38,36 +39,79 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
     // @ts-ignore
     return createPortal(
       <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-        {/* 遮罩 */}
+        {/* 注入弹窗动画 CSS */}
+        <style jsx>{`
+          @keyframes modalEnter {
+            0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+          }
+          .animate-modal-enter {
+            animation: modalEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          }
+        `}</style>
+
+        {/* 1. 全屏遮罩：渐变黑 + 模糊 */}
         <div 
-          className="absolute inset-0 bg-black/80 backdrop-blur-md transition-opacity animate-fade-in"
+          className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-300 ease-out"
           onClick={() => setShowModal(false)}
         ></div>
         
-        {/* 弹窗主体 */}
-        <div className="relative z-10 w-full max-w-[280px] transform overflow-hidden rounded-2xl bg-[#1c1c1e] p-6 text-center shadow-2xl transition-all border border-white/10 animate-fade-in-up">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500 opacity-80"></div>
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/5 border border-white/10">
-            <span className="text-xl">🏷️</span>
-          </div>
-          <h3 className="text-lg font-bold text-white mb-1 tracking-wide">商家编号</h3>
-          <p className="text-xs text-gray-400 mb-5">点击下方卡片复制编号</p>
-          <div 
-            onClick={handleCopy}
-            className="group relative cursor-pointer mb-5 p-3 bg-black/40 rounded-xl border border-white/5 shadow-inner hover:border-blue-500/50 transition-colors"
-          >
-            <span className="text-xl font-mono font-bold text-white tracking-widest">{SHOP_CODE}</span>
-            <div className={`absolute inset-0 flex items-center justify-center rounded-xl bg-blue-600 transition-all duration-200 ${isCopied ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
-              <span className="text-xs font-bold text-white">已复制 ✅</span>
+        {/* 2. 弹窗主体：高级毛玻璃 + 进场动效 */}
+        <div className="relative z-10 w-full max-w-[300px] overflow-hidden rounded-3xl animate-modal-enter
+          bg-[#1c1c1e]/85 backdrop-blur-2xl 
+          border border-white/10 
+          shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+        >
+          {/* 顶部高光线条 */}
+          <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+
+          <div className="p-8 text-center flex flex-col items-center">
+            
+            {/* 标题 */}
+            <h3 className="text-xl font-bold text-white mb-2 tracking-wide drop-shadow-sm">
+              商家编号
+            </h3>
+            <p className="text-xs text-gray-400 mb-6 font-medium">
+              点击下方卡片即可复制
+            </p>
+            
+            {/* 编号显示区域：深色凹陷质感 */}
+            <div 
+              onClick={handleCopy}
+              className="group relative cursor-pointer w-full mb-6 p-4 rounded-2xl transition-all duration-300
+                bg-black/30 border border-white/5 
+                shadow-[inset_0_2px_6px_rgba(0,0,0,0.4)] 
+                hover:bg-black/50 hover:border-white/10"
+            >
+              <span className="text-2xl font-mono font-bold text-white tracking-widest block">
+                {SHOP_CODE}
+              </span>
+              
+              {/* 复制成功反馈 (覆盖层) */}
+              <div className={`
+                absolute inset-0 flex items-center justify-center rounded-2xl 
+                bg-blue-600/90 backdrop-blur-sm
+                transition-all duration-300 
+                ${isCopied ? 'opacity-100 visible scale-100' : 'opacity-0 invisible scale-95'}
+              `}>
+                <span className="text-xs font-bold text-white flex items-center gap-1">
+                  <span>✨</span> 已复制成功
+                </span>
+              </div>
             </div>
+
+            {/* 关闭按钮：白色悬浮感 */}
+            <button
+              type="button"
+              className="w-full py-3 rounded-xl text-sm font-bold text-black 
+                bg-white hover:bg-gray-100 
+                shadow-[0_4px_12px_rgba(255,255,255,0.1)] 
+                active:scale-95 transition-all duration-200"
+              onClick={() => setShowModal(false)}
+            >
+              关闭
+            </button>
           </div>
-          <button
-            type="button"
-            className="w-full py-2.5 rounded-lg bg-white text-black text-xs font-bold hover:bg-gray-200 transition-colors"
-            onClick={() => setShowModal(false)}
-          >
-            关闭
-          </button>
         </div>
       </div>,
       document.body
@@ -76,22 +120,19 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
 
   return (
     <React.StrictMode>
-      {/* 注入流光和呼吸动画 CSS */}
+      {/* 注入按钮流光动画 CSS */}
       <style jsx global>{`
-        /* 按钮扫光动画 */
         @keyframes shimmer {
           0% { transform: translateX(-150%) skewX(-20deg); }
           100% { transform: translateX(150%) skewX(-20deg); }
         }
-        /* 边框流光背景移动 */
         @keyframes borderFlow {
           0% { background-position: 0% 50%; }
           50% { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
         }
-        
         .animate-shimmer {
-          animation: shimmer 1.5s infinite; /* 加快速度，更明显 */
+          animation: shimmer 1.5s infinite;
         }
         .animate-border-flow {
           background-size: 200% 200%;
@@ -101,21 +142,16 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
 
       {showModal && <Modal />}
 
-      {/* 
-         外部容器 Wrapper：负责处理 hover 缩放 
-         group/card 用于控制内部的流光显示
-      */}
+      {/* 外部组件容器 (保持之前的完美状态) */}
       <div className="relative h-full w-full group/card transition-transform duration-300 ease-out hover:scale-[1.02]">
         
-        {/* ✨ 核心特效：科幻流光边缘 ✨
-            原理：在卡片后面放一个略大的渐变层，平时透明，hover时显示，形成发光边框效果
-        */}
+        {/* 流光边缘 */}
         <div className="absolute -inset-[1px] rounded-[26px] bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 opacity-0 group-hover/card:opacity-70 blur-sm transition-opacity duration-500 animate-border-flow"></div>
 
-        {/* 真实的毛玻璃卡片本体 */}
+        {/* 毛玻璃卡片本体 */}
         <div className="relative h-full w-full overflow-hidden rounded-3xl border border-white/10 shadow-2xl bg-[#151516]/80 backdrop-blur-2xl">
           
-          {/* 背景装饰：深邃的极光 */}
+          {/* 背景装饰 */}
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-600/10 rounded-full blur-[40px] pointer-events-none group-hover/card:bg-blue-600/20 transition-colors duration-500"></div>
           <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-purple-600/10 rounded-full blur-[40px] pointer-events-none group-hover/card:bg-purple-600/20 transition-colors duration-500"></div>
 
@@ -132,7 +168,7 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
             {/* 下半部分：动效按钮组 */}
             <div className="flex flex-col gap-3 w-full mt-2"> 
                 
-                {/* 按钮 1：白色 + 黑色流光扫过 */}
+                {/* 按钮 1：白色 + 扫光 */}
                 <button 
                   onClick={() => setShowModal(true)} 
                   type="button" 
@@ -143,14 +179,11 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
                     transition-all duration-300
                     hover:shadow-white/20"
                 >
-                  {/* 文字层 */}
                   <span className="relative z-10">查看商家编号</span>
-                  
-                  {/* ✨ 扫光层 (黑色半透明，在白色背景上显眼) */}
                   <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-black/10 to-transparent -translate-x-full group-hover/btn:animate-shimmer z-0 pointer-events-none"></div>
                 </button>
 
-                {/* 按钮 2：红色 + 白色流光扫过 */}
+                {/* 按钮 2：红色 + 扫光 */}
                 <button 
                   onClick={() => window.location.href = 'https://login.1zs.top/'} 
                   type="button" 
@@ -163,8 +196,6 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
                     hover:bg-red-500 hover:shadow-red-600/40" 
                 >
                   <span className="relative z-10">前往一站式</span>
-                  
-                  {/* ✨ 扫光层 (亮白色，在红色背景上显眼) */}
                   <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover/btn:animate-shimmer z-0 pointer-events-none"></div>
                 </button>
 
