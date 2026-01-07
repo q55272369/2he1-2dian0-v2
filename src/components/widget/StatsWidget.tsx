@@ -41,7 +41,6 @@ const MemberModal = ({ isOpen, onClose, isCopied, onCopy }: any) => {
             关闭
           </button>
 
-          {/* 恢复：带链接的底部支持信息 */}
           <p className="mt-6 text-[10px] text-gray-500/60 font-light tracking-wide leading-relaxed">
             当前服务由 PRO+ 寄售平台提供支持 · 详情请查看{' '}
             <a 
@@ -87,7 +86,7 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
         @keyframes shimmer { 0% { transform: translateX(-150%) skewX(-20deg); } 100% { transform: translateX(150%) skewX(-20deg); } }
         @keyframes borderFlow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         .animate-shimmer { animation: shimmer 2s infinite linear; }
-        .animate-border-flow { background-size: 200% 200%; animation: borderFlow 3s ease infinite; }
+        .animate-border-flow { background-size: 200% 200%; animation: borderFlow 4s ease infinite; }
       `}</style>
 
       {showModal && (
@@ -100,13 +99,13 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
       )}
 
       <div className="relative h-full w-full group/card transition-all duration-300">
-        {/* 背景流光边缘 */}
         <div className="absolute -inset-[1px] rounded-[26px] bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 opacity-0 group-hover/card:opacity-70 blur-sm animate-border-flow transition-opacity"></div>
 
-        <div className="relative h-full w-full overflow-hidden rounded-3xl border border-white/10 shadow-2xl bg-[#151516]/80 backdrop-blur-2xl p-4 sm:p-6 flex flex-col justify-between min-h-[180px]">
+        {/* 容器增加 pb-5 (原本 padding 可能不均)，确保底部有呼吸感 */}
+        <div className="relative h-full w-full overflow-hidden rounded-3xl border border-white/10 shadow-2xl bg-[#151516]/80 backdrop-blur-2xl p-4 sm:p-6 flex flex-col justify-between min-h-[190px]">
           
-          {/* 标题区域：保留绿色呼吸灯 */}
-          <div className="flex items-center justify-center gap-2.5 mb-4 sm:mb-6">
+          {/* 标题区域 */}
+          <div className="flex items-center justify-center gap-2.5 mb-2 sm:mb-4 mt-1">
              <h2 className="text-lg sm:text-2xl font-extrabold text-white tracking-wide antialiased">
                会员服务
              </h2>
@@ -139,9 +138,11 @@ export const StatsWidget = ({ data }: { data: BlogStats }) => {
               </button>
           </div>
           
-          {/* 底部信息：删除 POSTS，修改 LIVE 为 PRO+ SUPPORT，统一为灰色 */}
-          <div className="mt-2 sm:mt-4 flex justify-center items-center text-[8px] sm:text-[10px] text-gray-500/60 font-bold tracking-[0.15em] uppercase">
-            <span>PRO+ SUPPORT</span>
+          {/* 底部信息：改为右对齐，并增加 pb-1 让它上浮一点 */}
+          <div className="mt-auto pt-4 flex justify-end items-center pr-1 pb-1">
+            <span className="text-[7px] sm:text-[9px] text-gray-500/50 font-bold tracking-[0.1em] uppercase antialiased">
+              PRO+ SUPPORT
+            </span>
           </div>
         </div>
       </div>
