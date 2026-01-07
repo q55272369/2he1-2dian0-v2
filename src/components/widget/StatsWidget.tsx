@@ -27,7 +27,7 @@ const MemberModal = ({ isOpen, onClose, isCopied, onCopy }: any) => {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={onClose} />
       <div className="relative z-10 w-full max-w-[300px] overflow-hidden rounded-3xl bg-[#1c1c1e]/90 backdrop-blur-2xl border border-white/10 shadow-2xl animate-modal-enter">
         <div className="p-8 text-center flex flex-col items-center">
-          <h3 className="text-xl font-bold text-white mb-2">👑永久会员：￥000</h3>
+          <h3 className="text-xl font-bold text-white mb-2">本站永久会员：￥000</h3>
           <p className="text-xs text-gray-400 mb-6 leading-relaxed px-2">请打开网页右下角客服工具发送当前站点编号，按照指引完成注册及购买，点击复制👇</p>
           
           <div onClick={onCopy} className="group relative cursor-pointer w-full mb-6 p-4 rounded-2xl bg-black/40 border border-white/5 transition-all hover:bg-black/60">
