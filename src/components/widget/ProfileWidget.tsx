@@ -2,6 +2,7 @@
 import { useScreenSize } from '@/src/hooks/useScreenSize'
 import { classNames, isValidUrl } from '@/src/lib/util'
 import Link from 'next/link'
+import React from 'react' // 👈 关键修复：显式引入 React
 import { DynamicIcon } from '../DynamicIcon'
 import { WidgetContainer } from './WidgetContainer'
 
@@ -23,26 +24,12 @@ const LinkIcon = ({ icon, hasId }: { icon: string; hasId: boolean }) => {
   )
 }
 
-// 辅助函数：定义品牌颜色 (保持不变)
-const getBrandGradient = (url: string, iconName: string): string => {
-  const target = (url + iconName).toLowerCase();
-  // 保持你原有的颜色逻辑
-  if (target.includes('about')) return 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)'; // 紫色
-  if (target.includes('download')) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'; // 橙色
-  if (target.includes('friends')) return 'linear-gradient(135deg, #3b82f6 0%, #0284c7 100%)'; // 蓝色
-  // 默认兜底
-  return 'linear-gradient(135deg, #525252 0%, #404040 100%)';
-}
-
 export const ProfileWidget = ({ data }: { data: any }) => {
   // 1. 强力查找头像地址
   const avatarSrc = data?.logo?.src || data?.image || data?.avatar || '';
   const name = data?.name || 'Profile';
   const bio = data?.description || 'PRO+创作者';
 
-  // 模拟三个固定按钮的数据 (如果 data.links 不足，这里作为兜底或样式参考)
-  // 注意：实际逻辑依然依赖传入的 data.links
-  
   return (
     <React.StrictMode>
       {/* 注入动画样式 (确保两个组件都拥有动画) */}
@@ -115,10 +102,6 @@ export const ProfileWidget = ({ data }: { data: any }) => {
             {/* 下半部分：功能按钮组 (Grid 布局，三等分，填满底部) */}
             <div className="w-full mt-4">
               <div className="grid grid-cols-3 gap-3 w-full">
-                {/* 
-                   硬编码三个核心按钮，确保样式和链接绝对正确
-                   如果未来想动态读取 data.links，可以替换这里，但样式要保持一致 
-                */}
                 
                 {/* 按钮 1: 入会说明 */}
                 <Link
