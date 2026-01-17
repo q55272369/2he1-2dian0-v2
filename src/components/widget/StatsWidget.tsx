@@ -7,9 +7,8 @@ import Link from 'next/link'
 // 硬编码商家编号
 const SHOP_CODE = "PRO-001A"
 
-// 默认兜底背景图 (当没有公告或公告没封面时显示)
-// 你可以换成你喜欢的任何图片链接
-const DEFAULT_COVER = "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=2070&auto=format&fit=crop"
+// 默认兜底背景图
+const DEFAULT_COVER = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop"
 
 export const StatsWidget = ({ data }: { data: any[] }) => {
   const [showModal, setShowModal] = useState(false)
@@ -20,29 +19,39 @@ export const StatsWidget = ({ data }: { data: any[] }) => {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isAnimating, setIsAnimating] = useState(false)
 
-  // 处理数据：如果没有数据，使用美化后的默认兜底
-  const announcements = data && data.length > 0 ? data : [
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // 1. 数据源判断与处理
+  // 如果传入的 data 有内容，就用 data；否则使用兜底数据
+  const hasData = data && Array.isArray(data) && data.length > 0;
+  
+  const announcements = hasData ? data : [
     {
       id: 'default',
-      title: '最新公告', // 默认标题
-      slug: '#', // 默认不跳转或跳转首页
-      summary: '更多精彩内容即将上线，敬请期待...', // 默认文案（已去除 Notion 提示）
-      page_cover: DEFAULT_COVER // 默认背景
+      title: '暂无公告',
+      slug: '#', 
+      excerpt: '请在 Notion 中添加 type 为 Announcement 的内容...',
+      cover: DEFAULT_COVER
     }
   ]
 
   const currentPost = announcements[currentIndex]
 
-  // 获取封面图：兼容 page_cover, cover, 或默认图
-  const coverImage = currentPost.page_cover || currentPost.cover || DEFAULT_COVER
-  // 获取摘要：兼容 summary, excerpt, description
-  const summaryText = currentPost.summary || currentPost.excerpt || currentPost.description || ''
+  // 2. 关键修复：精准映射你的数据库字段
+  // 优先读取你截图里的 'cover' 字段，如果没有才读默认的 'page_cover'
+  const coverImage = currentPost.cover || currentPost.page_cover || DEFAULT_COVER
+  
+  // 优先读取你截图里的 'excerpt' 字段，如果没有才读 'summary'
+  const summaryText = currentPost.excerpt || currentPost.summary || ''
+  
+  // 3. 路由处理：直接跳转到 /[slug]
+  const href = currentPost.slug === '#' 
+    ? '#' 
+    : (currentPost.slug.startsWith('/') ? currentPost.slug : `/${currentPost.slug}`)
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // 自动轮播逻辑
+  // 自动轮播
   useEffect(() => {
     if (announcements.length <= 1) return
     const interval = setInterval(() => {
@@ -52,7 +61,6 @@ export const StatsWidget = ({ data }: { data: any[] }) => {
         setIsAnimating(false)
       }, 500)
     }, 5000)
-
     return () => clearInterval(interval)
   }, [announcements.length])
 
@@ -113,54 +121,42 @@ export const StatsWidget = ({ data }: { data: any[] }) => {
     <React.StrictMode>
       {showModal && <Modal />}
 
+      {/* 外部容器 */}
       <div className="relative h-full w-full group/card transition-transform duration-500 ease-out hover:scale-[1.015]">
         
+        {/* 流光边缘 */}
         <div className="absolute -inset-[1px] rounded-[26px] bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 opacity-0 group-hover/card:opacity-100 blur-[2px] transition-opacity duration-500"></div>
 
+        {/* 主体 */}
         <div className="relative h-full w-full overflow-hidden rounded-3xl border border-white/10 shadow-2xl bg-[#151516] flex flex-col">
           
           {/* ================= 背景图层 ================= */}
           <div className="absolute inset-0 z-0">
              <div className={`absolute inset-0 transition-opacity duration-500 ${isAnimating ? 'opacity-0' : 'opacity-100'}`}>
-                {/* 封面图：使用了 object-cover 确保铺满 */}
                 <img 
                   src={coverImage} 
                   alt="cover" 
-                  className="w-full h-full object-cover opacity-60" 
+                  className="w-full h-full object-cover opacity-70" // 提高一点透明度让图片更清晰
                 />
              </div>
-             {/* 遮罩加强：确保文字在任何图片上都清晰 */}
-             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/20"></div>
+             {/* 遮罩：保证文字可读 */}
+             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
           </div>
 
           {/* ================= 内容层 ================= */}
           <div className="relative z-10 flex flex-col h-full justify-between p-6">
             
             {/* 上半部分：公告内容 */}
-            {/* 修复点：修改 Link href 为 /post/，并增加判断，如果是默认数据则不跳转 */}
             <Link 
-              href={currentPost.slug === '#' ? '#' : `/post/${currentPost.slug}`} 
+              href={href} 
               className={`flex-1 flex flex-col justify-center group/text ${currentPost.slug === '#' ? 'cursor-default' : 'cursor-pointer'}`}
             >
-               <div className="mb-2 flex items-center gap-2">
-                 <span className="px-2 py-0.5 rounded-full bg-red-600/90 text-[10px] font-bold text-white shadow-lg shadow-red-500/30">
-                   公告
-                 </span>
-                 {announcements.length > 1 && (
-                   <div className="flex gap-1">
-                     {announcements.map((_, idx) => (
-                       <div key={idx} className={`w-1 h-1 rounded-full transition-all ${idx === currentIndex ? 'bg-white w-3' : 'bg-white/30'}`}></div>
-                     ))}
-                   </div>
-                 )}
-               </div>
-
-               {/* 标题 */}
-               <h2 className={`text-xl font-extrabold text-white leading-tight tracking-tight mb-2 drop-shadow-md transition-opacity duration-500 ${isAnimating ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'} ${currentPost.slug !== '#' && 'group-hover/text:text-blue-300'} transition-colors`}>
+               {/* 标题：font-extrabold */}
+               <h2 className={`text-xl font-extrabold text-white leading-tight tracking-tight mb-3 drop-shadow-md transition-opacity duration-500 ${isAnimating ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'} ${currentPost.slug !== '#' && 'group-hover/text:text-blue-300'} transition-colors`}>
                  {currentPost.title}
                </h2>
                
-               {/* 摘要 (修复：尝试读取 summary 或 fallback) */}
+               {/* 摘要：调用 excerpt */}
                <p className={`text-xs text-gray-200 font-medium line-clamp-2 leading-relaxed transition-opacity duration-500 delay-75 ${isAnimating ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
                  {summaryText}
                </p>
