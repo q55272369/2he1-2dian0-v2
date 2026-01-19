@@ -74,7 +74,7 @@ export const StatsWidget = ({ data }: { data: any }) => {
             </div>
 
             <h3 className="text-lg font-bold text-white mb-2 tracking-wide">
-              站长已认证✅
+              已认证✅
             </h3>
             <p className="text-xs text-gray-400 mb-6 font-medium leading-relaxed">
               您可以通过网页右下角在线客服发送ID用于验证或举报
