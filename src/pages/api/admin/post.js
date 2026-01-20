@@ -113,7 +113,6 @@ export default async function handler(req, res) {
         rawBlocks = blocksRes.results; 
       } catch (e) {}
 
-      // 修正：处理 Lock 块的回显
       mdblocks.forEach(b => {
         if (b.type === 'callout' && b.parent.includes('LOCK:')) {
           const pwdMatch = b.parent.match(/LOCK:(.*?)(\n|$)/);
@@ -131,16 +130,19 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         success: true,
-        post: { // 注意：前端使用的是 post 字段
+        post: { 
           title: p.title?.title?.[0]?.plain_text || '',
           slug: p.slug?.rich_text?.[0]?.plain_text || '',
           excerpt: p.excerpt?.rich_text?.[0]?.plain_text || '',
           category: p.category?.select?.name || '',
           tags: p.tags?.multi_select?.map(t => t.name).join(',') || '',
           cover: p.cover?.url || '',
-          status: p.status?.status?.name || p.status?.select?.name || 'Published', // 兼容 select 和 status 类型
+          status: p.status?.status?.name || p.status?.select?.name || 'Published',
           date: p.date?.date?.start || '',
-          type: p.type?.select?.name || 'Post',
+          
+          // ✅ 同样补上 type
+          type: p.type?.select?.name || p.Type?.select?.name || 'Post',
+          
           content: cleanContent,
           rawBlocks: rawBlocks
         }
@@ -159,36 +161,26 @@ export default async function handler(req, res) {
         "excerpt": { rich_text: [{ text: { content: excerpt || "" } }] },
         "category": category ? { select: { name: category } } : { select: null },
         "tags": { multi_select: (tags || "").split(',').filter(t => t.trim()).map(t => ({ name: t.trim() })) },
-        "status": { select: { name: status } }, // 这里的 status 属性名可能需要根据你 Notion 实际类型改为 "status": { status: { name: status } }
+        "status": { select: { name: status } },
         "date": date ? { date: { start: date } } : null,
+        
+        // ✅ 写入时也加上 type (默认为 Post)
         "type": { select: { name: type || "Post" } }
       };
-      // 只有当有封面链接时才更新，防止报错
       if (cover && cover.startsWith('http')) {
           props["cover"] = { url: cover };
       }
 
       if (id) {
-        // 更新模式：先更属性，再换内容
         await notion.pages.update({ page_id: id, properties: props });
-        // 清空旧块 (Notion API 限制，只能通过删除旧块实现“更新内容”)
         const children = await notion.blocks.children.list({ block_id: id });
-        // 并发删除提高速度
         await Promise.all(children.results.map(b => notion.blocks.delete({ block_id: b.id })));
-        
-        // 写入新块
         for (let i = 0; i < newBlocks.length; i += 10) {
           await notion.blocks.children.append({ block_id: id, children: newBlocks.slice(i, i + 10) });
-          // 小休眠防止 API 限流
           if (i + 10 < newBlocks.length) await sleep(200);
         }
       } else {
-        // 创建模式
-        await notion.pages.create({ 
-          parent: { database_id: dbId }, 
-          properties: props, 
-          children: newBlocks.slice(0, 50) 
-        });
+        await notion.pages.create({ parent: { database_id: dbId }, properties: props, children: newBlocks.slice(0, 50) });
       }
       return res.status(200).json({ success: true });
     }
