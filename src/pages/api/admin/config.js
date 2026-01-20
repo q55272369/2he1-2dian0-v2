@@ -2,10 +2,10 @@ import { Client } from '@notionhq/client';
 
 export default async function handler(req, res) {
   // 1. 初始化 Notion 客户端
-  const notion = new Client({
-    auth: process.env.NOTION_TOKEN || process.env.NOTION_KEY,
+const notion = new Client({
+    auth: process.env.NOTION_KEY || process.env.NOTION_TOKEN,
   });
-  const databaseId = process.env.NOTION_PAGE_ID || process.env.NOTION_DATABASE_ID;
+  const databaseId = process.env.NOTION_DATABASE_ID || process.env.NOTION_PAGE_ID;
 
   try {
     // 2. 获取数据库信息

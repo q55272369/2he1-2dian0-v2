@@ -2,9 +2,9 @@ import { Client } from '@notionhq/client';
 
 export default async function handler(req, res) {
   const notion = new Client({
-    auth: process.env.NOTION_TOKEN || process.env.NOTION_KEY,
+    auth: process.env.NOTION_KEY || process.env.NOTION_TOKEN,
   });
-  const databaseId = process.env.NOTION_PAGE_ID || process.env.NOTION_DATABASE_ID;
+  const databaseId = process.env.NOTION_DATABASE_ID || process.env.NOTION_PAGE_ID;
 
   try {
     // 查询 Notion 数据库
