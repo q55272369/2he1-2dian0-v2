@@ -1,15 +1,15 @@
 import React from 'react'
 import dynamic from 'next/dynamic'
 
-// 关键：禁用 SSR，强制在客户端渲染
+// ✅ 关键修改：这里全部改成小写 adminsystem
 const AdminComponent = dynamic(
-  () => import('../components/AdminSystem/AdminDashboard'),
+  () => import('../components/adminsystem/AdminDashboard'),
   { ssr: false }
 )
 
 const AdminPage = () => {
   return (
-    <div id="admin-container" style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#1a1a1a', overflow: 'auto' }}>
+    <div suppressHydrationWarning>
       <AdminComponent />
     </div>
   )
