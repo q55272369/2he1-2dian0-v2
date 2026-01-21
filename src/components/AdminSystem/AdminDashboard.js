@@ -212,13 +212,16 @@ const parseContentToBlocks = (md) => {
       continue;
     }
 
-    // B. 识别 Notion 原生 > 🔒
-    if (!isLocking && trimmed.match(/^>\s*🔒\s*\*\*LOCK:(.*?)\*\*/)) {
+    // B. 识别 Notion 原生 > 🔒 (修复二次编辑炸裂)
+    // 关键修复：这里的正则现在能完美匹配 Notion 返回的引用块格式
+    if (!isLocking && trimmed.match(/^>\s*🔒/)) {
       flushBuffer(); isLocking = true;
       const match = trimmed.match(/LOCK:(.*?)\*\*/);
       lockPwd = match ? match[1].trim() : '';
       continue;
     }
+    
+    // 结束条件：非引用行且非空行
     if (isLocking && !trimmed.startsWith('>') && !trimmed.startsWith(':::') && trimmed !== '') {
        isLocking = false;
        const joinedLock = lockBuffer.join('\n').trim();
@@ -230,10 +233,13 @@ const parseContentToBlocks = (md) => {
 
     if (isLocking) {
       let contentLine = line;
+      // 去除 Notion 引用符号
       if (contentLine.startsWith('> ')) contentLine = contentLine.substring(2);
       else if (contentLine.startsWith('>')) contentLine = contentLine.substring(1);
+      
       if (contentLine.trim() === '---') continue;
       if (contentLine.trim() === '') continue;
+
       lockBuffer.push(contentLine);
       continue;
     }
@@ -346,28 +352,6 @@ const BlockBuilder = ({ blocks, setBlocks }) => {
   );
 };
 
-const NotionView = ({ blocks }) => {
-  if (!blocks || !Array.isArray(blocks)) return <div style={{padding:20, color:'#666'}}>暂无预览内容</div>;
-  return (
-    <div style={{color:'#e1e1e3', fontSize:'15px', lineHeight:'1.8'}}>
-      {blocks.map((b, i) => {
-        const type = b.type; const data = b[type]; const text = data?.rich_text?.[0]?.plain_text || "";
-        if(type==='heading_1') return <h1 key={i} style={{fontSize:'1.8em', borderBottom:'1px solid #333', paddingBottom:'8px', margin:'24px 0 12px'}}>{text}</h1>;
-        if(type==='paragraph') {
-            const richText = data?.rich_text?.[0];
-            if (richText?.annotations?.code) return <div key={i} style={{margin:'10px 0', borderLeft:'3px solid #ff6b6b', paddingLeft:'10px'}}><span style={{color:'#ff6b6b', fontFamily:'monospace', fontSize:'0.95em'}}>{text}</span></div>;
-            return <p key={i} style={{margin:'10px 0', minHeight:'1em'}}>{text}</p>;
-        }
-        if(type==='divider') return <hr key={i} style={{border:'none', borderTop:'1px solid #444', margin:'24px 0'}} />;
-        if(type==='image') { const url = data?.file?.url || data?.external?.url; if (!url) return null; const isVideo = url.match(/\.(mp4|mov|webm|ogg)(\?|$)/i); if(isVideo) return <div key={i} style={{display:'flex', justifyContent:'center', margin:'20px 0'}}><div style={{width:'100%', maxHeight:'500px', borderRadius:'8px', background:'#000', display:'flex', justifyContent:'center'}}><video src={url} controls preload="metadata" style={{maxWidth:'100%', maxHeight:'100%'}} /></div></div>; return <div key={i} style={{display:'flex', justifyContent:'center', margin:'20px 0'}}><div style={{width: '100%', height: '500px', background: '#000', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden'}}><img src={url} style={{maxWidth: '100%', maxHeight: '100%', objectFit: 'contain'}} alt="" /></div></div>; }
-        if(type==='video' || type==='embed') { let url = data?.file?.url || data?.external?.url || data?.url; if(!url) return null; const isY = url.includes('youtube')||url.includes('youtu.be'); if(isY){if(url.includes('watch?v='))url=url.replace('watch?v=','embed/');if(url.includes('youtu.be/'))url=url.replace('youtu.be/','www.youtube.com/embed/');} return <div key={i} style={{display:'flex', justifyContent:'center', margin:'20px 0'}}>{(type==='embed'||isY)?<iframe src={url} style={{width:'100%',maxWidth:'800px',height:'450px',border:'none',borderRadius:'8px',background:'#000'}} allowFullScreen />:<video src={url} controls style={{width:'100%',maxHeight:'500px',borderRadius:'8px',background:'#000'}}/>}</div>; }
-        if(type==='callout') return <div key={i} style={{background:'#2d2d30', padding:'20px', borderRadius:'12px', border:'1px solid #3e3e42', display:'flex', gap:'15px', margin:'20px 0'}}><div style={{fontSize:'1.4em'}}>{b.callout.icon?.emoji || '🔒'}</div><div style={{flex:1}}><div style={{fontWeight:'bold', color:'greenyellow', marginBottom:'4px'}}>{text}</div><div style={{fontSize:'12px', opacity:0.5}}>[ 加密内容已受保护 ]</div></div></div>;
-        return null;
-      })}
-    </div>
-  );
-};
-
 // ==========================================
 // 5. 顶层入口组件
 // ==========================================
@@ -402,9 +386,7 @@ export default function AdminDashboard() {
     if (view === 'edit') {
       window.history.pushState({ view: 'edit' }, '', '?mode=edit');
     } else {
-      if (window.location.search.includes('mode=edit')) {
-         window.history.back();
-      }
+      if (window.location.search.includes('mode=edit')) window.history.back();
     }
     const onPopState = () => { if (view === 'edit') setView('list'); };
     window.addEventListener('popstate', onPopState);
@@ -418,6 +400,8 @@ export default function AdminDashboard() {
         const d = await r.json();
         if (d.success) {
           setForm(d.post);
+          // 修复：确保 previewData 和 editorBlocks 都能正确处理数据
+          if (d.post.rawBlocks) setPreviewData(d.post);
           setEditorBlocks(parseContentToBlocks(d.post.content));
           setCurrentId(id);
           setView('edit');
@@ -426,6 +410,20 @@ export default function AdminDashboard() {
         }
     } catch(e) { alert("网络错误: " + e.message); }
     finally { setLoading(false); }
+  };
+  
+  // 修复预览：直接使用 handleEdit 加载的数据或当前编辑器数据
+  const handlePreview = async (p) => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/admin/post?id=${p.id}`);
+        const d = await r.json();
+        if (d.success && d.post) {
+            setPreviewData(d.post);
+        } else {
+            alert('预览数据加载失败');
+        }
+      } catch(e) {} finally { setLoading(false); }
   };
 
   const handleCreate = () => { setForm({ title: '', slug: 'p-'+Date.now().toString(36), excerpt:'', content:'', category:'', tags:'', cover:'', status:'Published', type: 'Post', date: new Date().toISOString().split('T')[0] }); setEditorBlocks([]); setCurrentId(null); setView('edit'); setExpandedStep(1); };
