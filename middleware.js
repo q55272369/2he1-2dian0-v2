@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 export function middleware(req) {
   const { pathname } = req.nextUrl
 
-  // 拦截 /admin
   if (pathname.startsWith('/admin')) {
     const basicAuth = req.headers.get('authorization')
 
@@ -30,7 +29,6 @@ export function middleware(req) {
   return NextResponse.next()
 }
 
-// 扩大匹配范围，防止漏网
 export const config = {
   matcher: ['/admin/:path*', '/admin'],
 }

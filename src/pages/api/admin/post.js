@@ -6,7 +6,7 @@ const notion = new Client({
 });
 const n2m = new NotionToMarkdown({ notionClient: notion });
 
-// === 1. 强力解析器：还原你旧后台的强大格式转换功能 ===
+// === 1. 强力解析器 ===
 function parseLinesToChildren(text) {
   const lines = text.split(/\r?\n/);
   const blocks = [];
@@ -15,65 +15,34 @@ function parseLinesToChildren(text) {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // A. 尝试识别 Markdown 图片/链接语法: ![alt](url)
     const mdMatch = trimmed.match(/^!\[.*?\]\((.*?)\)$/) || trimmed.match(/^\[.*?\]\((.*?)\)$/);
     let potentialUrl = mdMatch ? mdMatch[1] : trimmed;
-
-    // B. 清洗 URL (去除多余参数，根据你旧项目的逻辑)
-    // 简单清洗：匹配 http 开头直到空格
     const urlMatch = potentialUrl.match(/https?:\/\/[^\s)\]"]+/);
     const cleanUrl = urlMatch ? urlMatch[0] : null;
 
-    // C. 判断是否为媒体链接 (图片/视频)
     if (cleanUrl && /\.(jpg|jpeg|png|gif|webp|bmp|svg|mp4|mov|webm|ogg|mkv)(\?|$)/i.test(cleanUrl)) {
       const isVideo = /\.(mp4|mov|webm|ogg|mkv)(\?|$)/i.test(cleanUrl);
-      if (isVideo) {
-        blocks.push({ 
-          object: 'block', type: 'video', 
-          video: { type: 'external', external: { url: cleanUrl } } 
-        });
-      } else {
-        blocks.push({ 
-          object: 'block', type: 'image', 
-          image: { type: 'external', external: { url: cleanUrl } } 
-        });
-      }
-      continue; // 识别为媒体后，跳过后续文本处理
-    }
-
-    // D. 标题识别
-    if (trimmed.startsWith('# ')) {
-      blocks.push({ object: 'block', type: 'heading_1', heading_1: { rich_text: [{ text: { content: trimmed.replace('# ', '') } }] } });
+      if (isVideo) blocks.push({ object: 'block', type: 'video', video: { type: 'external', external: { url: cleanUrl } } });
+      else blocks.push({ object: 'block', type: 'image', image: { type: 'external', external: { url: cleanUrl } } });
       continue;
-    } 
-
-    // E. 注释块 (反引号包裹)
-    if (trimmed.startsWith('`') && trimmed.endsWith('`') && trimmed.length > 1) {
-       const content = trimmed.slice(1, -1);
-       blocks.push({ 
-           object: 'block', type: 'paragraph', 
-           paragraph: { rich_text: [{ text: { content: content }, annotations: { code: true, color: 'red' } }] } 
-       });
-       continue;
     }
 
-    // F. 普通文本
+    if (trimmed.startsWith('# ')) { blocks.push({ object: 'block', type: 'heading_1', heading_1: { rich_text: [{ text: { content: trimmed.replace('# ', '') } }] } }); continue; } 
+    if (trimmed.startsWith('`') && trimmed.endsWith('`') && trimmed.length > 1) { blocks.push({ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ text: { content: trimmed.slice(1, -1) }, annotations: { code: true, color: 'red' } }] } }); continue; }
     blocks.push({ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ text: { content: trimmed } }] } });
   }
   return blocks;
 }
 
-// === 2. 积木转换器 (包含 Lock 逻辑) ===
+// === 2. 积木转换器 ===
 function mdToBlocks(markdown) {
   if (!markdown) return [];
-  const rawChunks = markdown.split(/\n{2,}/); // 按空行分段
+  const rawChunks = markdown.split(/\n{2,}/);
   const blocks = [];
-  
   let mergedChunks = [];
   let buffer = "";
   let isLocking = false;
 
-  // 处理 :::lock 包裹逻辑
   for (let chunk of rawChunks) {
     const t = chunk.trim();
     if (!t) continue;
@@ -87,22 +56,13 @@ function mdToBlocks(markdown) {
   }
   if (buffer) mergedChunks.push(buffer);
 
-  // 转换每一段
   for (let content of mergedChunks) {
     if (content.startsWith(':::lock')) {
         const firstLineEnd = content.indexOf('\n');
         const header = content.substring(0, firstLineEnd > -1 ? firstLineEnd : content.length);
         let pwd = header.replace(':::lock', '').replace(/[>*\s🔒]/g, '').trim(); 
         const body = content.replace(/^:::lock.*?\n/, '').replace(/\n:::$/, '').trim();
-        
-        blocks.push({ 
-            object: 'block', type: 'callout', 
-            callout: { 
-                rich_text: [{ text: { content: `LOCK:${pwd}` }, annotations: { bold: true } }], 
-                icon: { type: "emoji", emoji: "🔒" }, color: "gray_background", 
-                children: [ { object: 'block', type: 'divider', divider: {} }, ...parseLinesToChildren(body) ] 
-            } 
-        });
+        blocks.push({ object: 'block', type: 'callout', callout: { rich_text: [{ text: { content: `LOCK:${pwd}` }, annotations: { bold: true } }], icon: { type: "emoji", emoji: "🔒" }, color: "gray_background", children: [ { object: 'block', type: 'divider', divider: {} }, ...parseLinesToChildren(body) ] } });
     } else {
         blocks.push(...parseLinesToChildren(content));
     }
@@ -117,18 +77,13 @@ export default async function handler(req, res) {
   const databaseId = process.env.NOTION_DATABASE_ID || process.env.NOTION_PAGE_ID;
 
   try {
-    // === GET: 获取详情 (预览/回显) ===
     if (req.method === 'GET') {
       const page = await notion.pages.retrieve({ page_id: id });
       const mdblocks = await n2m.pageToMarkdown(id);
       const mdString = n2m.toMarkdownString(mdblocks);
       const p = page.properties;
-
       let rawBlocks = [];
-      try {
-        const blocksRes = await notion.blocks.children.list({ block_id: id });
-        rawBlocks = blocksRes.results;
-      } catch (e) {}
+      try { const blocksRes = await notion.blocks.children.list({ block_id: id }); rawBlocks = blocksRes.results; } catch (e) {}
 
       return res.status(200).json({
         success: true,
@@ -149,15 +104,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // === POST: 核心保存逻辑 ===
     if (req.method === 'POST') {
       const body = JSON.parse(req.body);
       const { id, title, content, slug, excerpt, category, tags, status, date, type, cover } = body;
-      
-      // 1. 生成新积木
       const newBlocks = mdToBlocks(content);
 
-      // 2. 准备属性
       const props = {};
       props["title"] = { title: [{ text: { content: title || "无标题" } }] };
       if (slug) props["slug"] = { rich_text: [{ text: { content: slug } }] };
@@ -174,39 +125,35 @@ export default async function handler(req, res) {
       if (cover && cover.startsWith('http')) props["cover"] = { url: cover };
 
       if (id) {
-        // === 场景 A：更新现有文章 ===
-        // 1. 先更新属性 (标题、状态等)
         await notion.pages.update({ page_id: id, properties: props });
-        
-        // 2. 【关键恢复】清空旧内容！
-        // Notion 不支持“修改”块，只能“先删再加”。
         const children = await notion.blocks.children.list({ block_id: id });
         if (children.results.length > 0) {
-            // 并发删除所有旧块
-            await Promise.all(children.results.map(b => notion.blocks.delete({ block_id: b.id })));
+            // 并发删除
+            const chunks = [];
+            for (let i = 0; i < children.results.length; i += 3) {
+                chunks.push(children.results.slice(i, i + 3));
+            }
+            for (const chunk of chunks) {
+                await Promise.all(chunk.map(b => notion.blocks.delete({ block_id: b.id })));
+            }
         }
         
-        // 3. 【关键恢复】写入新内容
-        // Notion API 限制每次最多追加 100 个块，这里按 10 个一批稳健写入
-        for (let i = 0; i < newBlocks.length; i += 10) {
-          await notion.blocks.children.append({ block_id: id, children: newBlocks.slice(i, i + 10) });
-          // 小睡一下，防止触发 API 速率限制
-          if (i + 10 < newBlocks.length) await sleep(200);
+        // 极速写入 (100个一批)
+        for (let i = 0; i < newBlocks.length; i += 100) {
+          await notion.blocks.children.append({ block_id: id, children: newBlocks.slice(i, i + 100) });
+          if (i + 100 < newBlocks.length) await sleep(100); 
         }
 
       } else {
-        // === 场景 B：创建新文章 ===
         await notion.pages.create({
           parent: { database_id: databaseId },
           properties: props,
-          children: newBlocks.slice(0, 50) // 新建时直接带入积木
+          children: newBlocks.slice(0, 100)
         });
       }
-
       return res.status(200).json({ success: true });
     }
 
-    // === DELETE ===
     if (req.method === 'DELETE') {
       await notion.pages.update({ page_id: id, archived: true });
       return res.status(200).json({ success: true });
