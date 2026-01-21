@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 export function middleware(req) {
   const { pathname } = req.nextUrl
 
-  // 拦截 /admin 路径
   if (pathname.startsWith('/admin')) {
     const basicAuth = req.headers.get('authorization')
 
@@ -11,7 +10,6 @@ export function middleware(req) {
       const authValue = basicAuth.split(' ')[1]
       const [user, pwd] = atob(authValue).split(':')
 
-      // 读取环境变量
       const validUser = process.env.AUTH_USER || 'admin'
       const validPass = process.env.AUTH_PASS || '123456'
 
@@ -20,8 +18,7 @@ export function middleware(req) {
       }
     }
 
-    // 验证失败，弹出原生登录框
-    return new NextResponse('Auth Required', {
+    return new NextResponse(null, {
       status: 401,
       headers: {
         'WWW-Authenticate': 'Basic realm="Secure Area"',
