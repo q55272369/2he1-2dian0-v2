@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 
 // ==========================================
-// 1. 图标库 (完整版，防止 undefined)
+// 1. 图标库
 // ==========================================
 const Icons = {
   Search: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
@@ -24,7 +24,7 @@ const Icons = {
 };
 
 // ==========================================
-// 2. 样式表 (内置)
+// 2. 样式表 (内置防止 Global CSS 报错)
 // ==========================================
 const GlobalStyle = () => (
   <style dangerouslySetInnerHTML={{__html: `
@@ -103,7 +103,7 @@ const GlobalStyle = () => (
 );
 
 // ==========================================
-// 3. 辅助组件 (必须放在主组件前)
+// 3. 辅助组件
 // ==========================================
 const SearchInput = ({ value, onChange }) => (
   <div className="group">
@@ -301,7 +301,7 @@ export default function AdminDashboard() {
   const [expandedStep, setExpandedStep] = useState(1);
   const [editorBlocks, setEditorBlocks] = useState([]);
   
-  // 🟢 防抖状态锁
+  // 🟢 新增：防抖状态锁
   const [isDeploying, setIsDeploying] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -331,7 +331,40 @@ export default function AdminDashboard() {
     return () => window.removeEventListener('popstate', onPopState);
   }, [view]);
 
-  // 🟢 状态机解析逻辑 (修复加密块显示问题)
+  const updateSiteTitle = async () => {
+    const newTitle = prompt("请输入新的网站标题:", siteTitle);
+    if (newTitle && newTitle !== siteTitle) {
+        setLoading(true); await fetch('/api/admin/config', { method: 'POST', body: JSON.stringify({ title: newTitle }) });
+        setSiteTitle(newTitle); setLoading(false);
+    }
+  };
+
+  const deleteTagOption = (e, tagToDelete) => {
+    e.stopPropagation();
+    const currentTags = form.tags ? form.tags.split(',').filter(t => t.trim()) : [];
+    const newTags = currentTags.filter(t => t.trim() !== tagToDelete).join(',');
+    setForm({ ...form, tags: newTags });
+  };
+
+  const handleNavClick = (idx) => { setNavIdx(idx); const modes = ['folder','covered','text','gallery']; setViewMode(modes[idx]); setSelectedFolder(null); };
+
+  useEffect(() => {
+    if(view !== 'edit') return;
+    const newContent = editorBlocks.map(b => {
+      let content = b.content || '';
+      if (b.type === 'text') content = cleanAndFormat(content); 
+      if (b.type === 'note') return `\`${content}\``;
+      if (b.type === 'h1') return `# ${content}`;
+      if (b.type === 'lock') {
+          const lockHeader = b.pwd ? `:::lock ${b.pwd}` : `:::lock`; 
+          return `${lockHeader}\n\n${cleanAndFormat(content)}\n\n:::`;
+      }
+      return content;
+    }).join('\n\n'); 
+    setForm(prev => ({ ...prev, content: newContent }));
+  }, [editorBlocks]);
+
+  // 状态机解析逻辑
   const parseContentToBlocks = (md) => {
     if(!md) return [];
     const lines = md.split(/\r?\n/);
@@ -415,7 +448,7 @@ export default function AdminDashboard() {
   const handleCreate = () => { setForm({ title: '', slug: 'p-'+Date.now().toString(36), excerpt:'', content:'', category:'', tags:'', cover:'', status:'Published', type: 'Post', date: new Date().toISOString().split('T')[0] }); setEditorBlocks([]); setCurrentId(null); setView('edit'); setExpandedStep(1); };
   
   const handleSave = async () => {
-    // 🟢 防抖
+    // 🟢 修复重复点击：如果正在部署中，禁止再次保存
     if (isDeploying) {
       alert("请等待上一次更新完成（约60秒）后再试！");
       return;
@@ -445,7 +478,7 @@ export default function AdminDashboard() {
         alert(`❌ 保存失败！\n\n错误信息:\n${d.error}`);
       } else {
         alert("✅ 保存成功！");
-        // 🟢 触发更新并进入冷却
+        // 🟢 修复：触发更新并进入冷却
         triggerDeploy();
         setView('list');
         fetchPosts();
@@ -457,38 +490,23 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🟢 更新冷却逻辑
+  // 🟢 修复：手动更新防抖逻辑 + 文案
   const triggerDeploy = async () => {
-    setIsDeploying(true);
+    setIsDeploying(true); // 锁定
     try { await fetch('/api/admin/deploy'); } catch(e) {}
+    // 60秒冷却
     setTimeout(() => setIsDeploying(false), 60000);
   };
 
   const handleManualDeploy = async () => {
-     if (isDeploying) return;
+     if (isDeploying) return; // 锁定中不响应
+     
      if(confirm('确定要立即更新Blog吗？\n点击确定将立刻开始更新，在完成内容更新前请不要重复提交更新请求！')) {
         await triggerDeploy();
         alert('已触发更新！请耐心等待约 1 分钟。');
      }
   };
 
-  const updateSiteTitle = async () => {
-    const newTitle = prompt("请输入新的网站标题:", siteTitle);
-    if (newTitle && newTitle !== siteTitle) {
-        setLoading(true); await fetch('/api/admin/config', { method: 'POST', body: JSON.stringify({ title: newTitle }) });
-        setSiteTitle(newTitle); setLoading(false);
-    }
-  };
-
-  const deleteTagOption = (e, tagToDelete) => {
-    e.stopPropagation();
-    const currentTags = form.tags ? form.tags.split(',').filter(t => t.trim()) : [];
-    const newTags = currentTags.filter(t => t.trim() !== tagToDelete).join(',');
-    setForm({ ...form, tags: newTags });
-  };
-
-  const handleNavClick = (idx) => { setNavIdx(idx); const modes = ['folder','covered','text','gallery']; setViewMode(modes[idx]); setSelectedFolder(null); };
-  
   const getFilteredPosts = () => {
      let list = posts.filter(p => {
         if (activeTab === 'Page') return p.type === 'Page' && ['about', 'download'].includes(p.slug);
@@ -508,15 +526,12 @@ export default function AdminDashboard() {
   const displayTags = (options.tags && options.tags.length > 0) ? (showAllTags ? options.tags : options.tags.slice(0, 12)) : [];
 
   if (!mounted) return null;
-  
-  // 🟢 动态按钮文本
-  const deployBtnText = isDeploying ? '更新中...' : '更新博客';
 
   return (
     <div style={{ minHeight: '100vh', background: '#303030', padding: '40px 20px' }}>
       <GlobalStyle />
       {loading && <FullScreenLoader />}
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
            <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
              {view === 'list' && <SearchInput value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />}
@@ -529,8 +544,8 @@ export default function AdminDashboard() {
            
            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
              {/* 🟢 更新按钮：状态绑定 */}
-             <button onClick={handleManualDeploy} style={{background:'#424242', border: isDeploying ? '1px solid #555' : '1px solid greenyellow', opacity: isDeploying ? 0.5 : 1, padding:'10px', borderRadius:'8px', color: isDeploying ? '#888' : 'greenyellow', cursor: isDeploying ? 'not-allowed' : 'pointer', display: 'flex', gap: 5, alignItems: 'center'}} title="立即更新博客前端">
-               <Icons.Refresh /> {deployBtnText}
+             <button onClick={handleManualDeploy} style={{background:'#424242', border: isDeploying ? '1px solid #555' : '1px solid greenyellow', opacity: isDeploying ? 0.5 : 1, padding:'10px', borderRadius:'8px', color: isDeploying ? '#888' : 'greenyellow', cursor: isDeploying ? 'not-allowed' : 'pointer'}} title="立即更新博客前端">
+               {isDeploying ? '更新中...' : <><Icons.Refresh /> 更新博客</>}
              </button>
 
              <button onClick={() => window.open('https://pan.cloudreve.org/xxx', '_blank')} style={{background:'#a855f7', border:'none', padding:'10px 20px', borderRadius:'8px', color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px', fontWeight:'bold', fontSize:'14px'}} className="btn-ia"><Icons.Tutorial /> 教程</button>
