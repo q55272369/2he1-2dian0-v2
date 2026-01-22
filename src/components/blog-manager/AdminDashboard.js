@@ -1,19 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 
-// ... (图标库 Icons 和样式 GlobalStyle 保持不变，省略以节省篇幅，请保留你原来的或复制上一个回答的)
-// 为了确保完整性，这里我只列出核心逻辑变更，建议你保留头部的 Icons 和 GlobalStyle
-// ...
-
-// ⬇️ 请保留文件头部的 Icons 和 GlobalStyle 定义，从这里开始覆盖后面的组件逻辑 ⬇️
-
-// ... Icons 定义 ...
-// ... GlobalStyle 定义 ...
-// ... SearchInput / StepAccordion / AnimatedBtn / SlidingNav / FullScreenLoader 定义 ...
-// (如果你需要完整代码，请用上一次回答的完整代码，然后只替换下面的 BlockBuilder 和 AdminDashboard)
-
-// 为了防止你拼接出错，我还是给你提供【完整代码块】，请直接全选覆盖：
-
 // ================= 1. 图标库 =================
 const Icons = {
   Search: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
@@ -100,7 +87,8 @@ const GlobalStyle = () => (
     .input:active { transform: scale(0.95); }
     .input:focus { box-shadow: 0 0 0 2.5px #2f303d; }
     .search-icon { position: absolute; left: 1rem; fill: #bdbecb; width: 1rem; height: 1rem; pointer-events: none; z-index: 1; }
-    .fab-scroll { position: fixed; right: 30px; bottom: 120px; display: flex; flex-direction: column; gap: 10px; z-index: 99; }
+    /* 🟢 修复：悬浮按钮上移至 150px */
+    .fab-scroll { position: fixed; right: 30px; bottom: 150px; display: flex; flex-direction: column; gap: 10px; z-index: 99; }
     .fab-btn { width: 45px; height: 45px; background: greenyellow; color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; transition: 0.2s; }
     .fab-btn:hover { transform: scale(1.1); box-shadow: 0 6px 16px rgba(173, 255, 47, 0.4); }
     .btn-disabled { opacity: 0.5; cursor: not-allowed; }
@@ -161,7 +149,6 @@ const FullScreenLoader = () => (
   </div>
 );
 
-// 工具函数：清洗 URL
 const cleanAndFormat = (input) => {
   if (!input) return "";
   try {
@@ -179,13 +166,9 @@ const cleanAndFormat = (input) => {
   } catch (e) { return input; }
 };
 
-// ==========================================
-// 4. 积木编辑器 (状态机逻辑 + 视角锁定)
-// ==========================================
 const BlockBuilder = ({ blocks, setBlocks }) => {
   const [movingId, setMovingId] = useState(null);
 
-  // 视角锁定
   const scrollToBlock = (id) => {
     setTimeout(() => {
        const el = document.getElementById(`block-${id}`);
@@ -299,9 +282,6 @@ const NotionView = ({ blocks }) => {
   );
 };
 
-// ==========================================
-// 5. 主组件
-// ==========================================
 export default function AdminDashboard() {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -315,21 +295,16 @@ export default function AdminDashboard() {
   const [selectedFolder, setSelectedFolder] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   
-  // 编辑器状态
-  const [form, setForm] = useState({ title: '', slug: '', excerpt: '', content: '', category: '', tags: '', cover: '', status: 'Published', type: 'Post', date: '' });
-  const [currentId, setCurrentId] = useState(null);
+  const [form, setForm] = useState({ title: '', slug: '', excerpt: '', content: '', category: '', tags: '', cover: '', status: 'Published', type: 'Post', date: '' }), [currentId, setCurrentId] = useState(null);
   const [siteTitle, setSiteTitle] = useState('PROBLOG');
   const [navIdx, setNavIdx] = useState(1); 
   const [expandedStep, setExpandedStep] = useState(1);
   const [editorBlocks, setEditorBlocks] = useState([]);
-  
-  // 🟢 防抖状态锁
   const [isDeploying, setIsDeploying] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
   const isFormValid = form.title.trim() !== '' && form.category.trim() !== '' && form.date !== '';
 
-  // 🛡️ 防崩检查: Fetch
   async function fetchPosts() {
     setLoading(true); 
     try { 
@@ -337,18 +312,12 @@ export default function AdminDashboard() {
        if (!r.ok) throw new Error(`API Error: ${r.status}`);
        const d = await r.json(); 
        if (d.success) { setPosts(d.posts || []); setOptions(d.options || { categories: [], tags: [] }); }
-       
-       const rConf = await fetch('/api/admin/config');
-       if (rConf.ok) {
-           const dConf = await rConf.json(); 
-           if (dConf.success && dConf.siteInfo) setSiteTitle(dConf.siteInfo.title);
-       }
+       const rConf = await fetch('/api/admin/config'); const dConf = await rConf.json(); if (dConf.success) setSiteTitle(dConf.siteInfo.title);
     } catch(e) { console.warn(e); } 
     finally { setLoading(false); } 
   }
   useEffect(() => { if (mounted) fetchPosts(); }, [mounted]);
 
-  // 后退逻辑
   useEffect(() => {
     if (view === 'edit') {
       window.history.pushState({ view: 'edit' }, '', '?mode=edit');
@@ -360,12 +329,17 @@ export default function AdminDashboard() {
     return () => window.removeEventListener('popstate', onPopState);
   }, [view]);
 
-  // 🟢 核心修复：智能解析器 (兼容 Notion 原生 Markdown)
+  // ✅ 核心修复：双模状态机解析 (兼容 :::lock 和 > 🔒)
   const parseContentToBlocks = (md) => {
     if(!md) return [];
     const lines = md.split(/\r?\n/);
     const res = [];
-    let buffer = []; let isLocking = false; let lockPwd = ''; let lockBuffer = [];  
+    let buffer = []; 
+    let isLocking = false; 
+    let lockPwd = ''; 
+    let lockBuffer = [];  
+    let lockMode = null; // 'explicit' (:::) or 'implicit' (>)
+
     const stripMd = (str) => { const match = str.match(/(?:!|)?\[.*?\]\((.*?)\)/); return match ? match[1] : str; };
     const flushBuffer = () => {
       if (buffer.length > 0) {
@@ -385,55 +359,62 @@ export default function AdminDashboard() {
       const line = lines[i];
       const trimmed = line.trim();
 
-      // A. 新建时的语法 :::lock
+      // A. Explicit mode start (:::lock)
       if (!isLocking && trimmed.startsWith(':::lock')) {
-        flushBuffer(); isLocking = true;
+        flushBuffer(); isLocking = true; lockMode = 'explicit';
         lockPwd = trimmed.replace(':::lock', '').replace(/[>*\s🔒]/g, '').trim();
         continue;
       }
-      if (isLocking && trimmed === ':::') {
-        isLocking = false;
-        const joinedLock = lockBuffer.map(stripMd).join('\n').trim();
-        res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
-        lockBuffer = [];
-        continue;
-      }
 
-      // B. Notion 返回的 Markdown 语法 > 🔒 (增强正则)
+      // B. Implicit mode start (> 🔒)
       if (!isLocking && trimmed.match(/^>\s*🔒\s*(\*\*)?LOCK:(.*?)(\*\*)?/)) {
-        flushBuffer(); isLocking = true;
+        flushBuffer(); isLocking = true; lockMode = 'implicit';
         const match = trimmed.match(/LOCK:(.*?)(\*|$)/);
         lockPwd = match ? match[1].trim() : '';
         continue;
       }
       
-      // C. 结束条件
-      if (isLocking && !trimmed.startsWith('>') && !trimmed.startsWith(':::') && trimmed !== '') {
-         isLocking = false;
-         const joinedLock = lockBuffer.join('\n').trim();
-         res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
-         lockBuffer = [];
-         i--; // 回退一行
-         continue;
-      }
-
+      // End Conditions
       if (isLocking) {
+        // 1. Explicit ends with :::
+        if (lockMode === 'explicit' && trimmed === ':::') {
+           isLocking = false;
+           const joinedLock = lockBuffer.map(stripMd).join('\n').trim();
+           res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
+           lockBuffer = [];
+           continue;
+        }
+        // 2. Implicit ends with non-quote
+        if (lockMode === 'implicit' && !trimmed.startsWith('>') && trimmed !== '') {
+           isLocking = false;
+           const joinedLock = lockBuffer.join('\n').trim();
+           res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
+           lockBuffer = [];
+           i--; // reprocess
+           continue;
+        }
+
+        // Processing content inside lock
         let contentLine = line;
-        if (contentLine.startsWith('> ')) contentLine = contentLine.substring(2);
-        else if (contentLine.startsWith('>')) contentLine = contentLine.substring(1);
+        if (lockMode === 'implicit') {
+            if (contentLine.startsWith('> ')) contentLine = contentLine.substring(2);
+            else if (contentLine.startsWith('>')) contentLine = contentLine.substring(1);
+        }
         if (contentLine.trim() === '---') continue;
         if (contentLine.trim() === '') continue;
         lockBuffer.push(contentLine);
         continue;
       }
 
+      // Normal blocks
       if (trimmed.startsWith('# ')) { flushBuffer(); res.push({ id: Date.now() + Math.random(), type: 'h1', content: trimmed.replace('# ', '') }); continue; }
       if (!trimmed) { flushBuffer(); continue; }
       buffer.push(line);
     }
     
+    // Final flush
     if (isLocking) {
-        const joinedLock = lockBuffer.join('\n').trim();
+        const joinedLock = lockMode === 'implicit' ? lockBuffer.join('\n').trim() : lockBuffer.map(stripMd).join('\n').trim();
         res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
     } else {
         flushBuffer();
@@ -482,26 +463,26 @@ export default function AdminDashboard() {
     }
   };
 
-  const updateSiteTitle = async () => {
-    const newTitle = prompt("请输入新的网站标题:", siteTitle);
-    if (newTitle && newTitle !== siteTitle) {
-        setLoading(true); await fetch('/api/admin/config', { method: 'POST', body: JSON.stringify({ title: newTitle }) });
-        setSiteTitle(newTitle); setLoading(false);
-    }
-  };
-
-  const triggerDeploy = async () => {
-    setIsDeploying(true);
-    try { await fetch('/api/admin/deploy'); } catch(e) {}
-    setTimeout(() => setIsDeploying(false), 60000);
-  };
-
   const handleManualDeploy = async () => {
      if (isDeploying) return;
      if(confirm('确定要立即更新Blog吗？\n点击确定将立刻开始更新，在完成内容更新前请不要重复提交更新请求！')) {
         await triggerDeploy();
         alert('已触发更新！请耐心等待约 1 分钟。');
      }
+  };
+  
+  const triggerDeploy = async () => {
+    setIsDeploying(true);
+    try { await fetch('/api/admin/deploy'); } catch(e) {}
+    setTimeout(() => setIsDeploying(false), 60000);
+  };
+
+  const updateSiteTitle = async () => {
+    const newTitle = prompt("请输入新的网站标题:", siteTitle);
+    if (newTitle && newTitle !== siteTitle) {
+        setLoading(true); await fetch('/api/admin/config', { method: 'POST', body: JSON.stringify({ title: newTitle }) });
+        setSiteTitle(newTitle); setLoading(false);
+    }
   };
 
   const deleteTagOption = (e, tagToDelete) => {
@@ -549,11 +530,9 @@ export default function AdminDashboard() {
            </div>
            
            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-             {/* 🟢 更新按钮 (仅图标) */}
              <button onClick={handleManualDeploy} style={{background:'#424242', border: isDeploying ? '1px solid #555' : '1px solid greenyellow', opacity: isDeploying ? 0.5 : 1, padding:'10px', borderRadius:'8px', color: isDeploying ? '#888' : 'greenyellow', cursor: isDeploying ? 'not-allowed' : 'pointer'}} title="立即更新博客前端">
                <Icons.Refresh />
              </button>
-
              <button onClick={() => window.open('https://pan.cloudreve.org/xxx', '_blank')} style={{background:'#a855f7', border:'none', padding:'10px 20px', borderRadius:'8px', color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px', fontWeight:'bold', fontSize:'14px'}} className="btn-ia"><Icons.Tutorial /> 教程</button>
              {view === 'list' ? <AnimatedBtn text="发布新内容" onClick={handleCreate} /> : <AnimatedBtn text="返回列表" onClick={() => setView('list')} />}
            </div>
