@@ -21,7 +21,7 @@ const Icons = {
   Tutorial: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
 };
 
-// ================= 2. 样式 =================
+// ================= 2. 全局样式 =================
 const GlobalStyle = () => (
   <style dangerouslySetInnerHTML={{__html: `
     body { background-color: #303030; color: #ffffff; margin: 0; font-family: system-ui, sans-serif; overflow-x: hidden; }
@@ -149,7 +149,6 @@ const FullScreenLoader = () => (
   </div>
 );
 
-// 🟢 修复：trim 报错，增加判空
 const cleanAndFormat = (input) => {
   if (!input) return "";
   try {
@@ -167,9 +166,6 @@ const cleanAndFormat = (input) => {
   } catch (e) { return input; }
 };
 
-// ==========================================
-// 4. 积木编辑器
-// ==========================================
 const BlockBuilder = ({ blocks, setBlocks }) => {
   const [movingId, setMovingId] = useState(null);
 
@@ -286,9 +282,6 @@ const NotionView = ({ blocks }) => {
   );
 };
 
-// ==========================================
-// 5. 主组件
-// ==========================================
 export default function AdminDashboard() {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -307,7 +300,6 @@ export default function AdminDashboard() {
   const [navIdx, setNavIdx] = useState(1); 
   const [expandedStep, setExpandedStep] = useState(1);
   const [editorBlocks, setEditorBlocks] = useState([]);
-  
   const [isDeploying, setIsDeploying] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -320,18 +312,12 @@ export default function AdminDashboard() {
        if (!r.ok) throw new Error(`API Error: ${r.status}`);
        const d = await r.json(); 
        if (d.success) { setPosts(d.posts || []); setOptions(d.options || { categories: [], tags: [] }); }
-       
-       const rConf = await fetch('/api/admin/config');
-       if (rConf.ok) {
-           const dConf = await rConf.json(); 
-           if (dConf.success && dConf.siteInfo) setSiteTitle(dConf.siteInfo.title);
-       }
+       const rConf = await fetch('/api/admin/config'); const dConf = await rConf.json(); if (dConf.success) setSiteTitle(dConf.siteInfo.title);
     } catch(e) { console.warn(e); } 
     finally { setLoading(false); } 
   }
   useEffect(() => { if (mounted) fetchPosts(); }, [mounted]);
 
-  // 后退逻辑
   useEffect(() => {
     if (view === 'edit') {
       window.history.pushState({ view: 'edit' }, '', '?mode=edit');
@@ -343,12 +329,17 @@ export default function AdminDashboard() {
     return () => window.removeEventListener('popstate', onPopState);
   }, [view]);
 
-  // 🟢 核心修复：状态机解析逻辑 (v1.0 严格版 + 判空保护)
+  // ✅ 核心修复：双模状态机解析 (兼容 :::lock 和 > 🔒)
   const parseContentToBlocks = (md) => {
-    if(!md) return []; // 防空
+    if(!md) return [];
     const lines = md.split(/\r?\n/);
     const res = [];
-    let buffer = []; let isLocking = false; let lockPwd = ''; let lockBuffer = [];  
+    let buffer = []; 
+    let isLocking = false; 
+    let lockPwd = ''; 
+    let lockBuffer = [];  
+    let lockMode = null; // 'explicit' (:::) or 'implicit' (>)
+
     const stripMd = (str) => { const match = str.match(/(?:!|)?\[.*?\]\((.*?)\)/); return match ? match[1] : str; };
     const flushBuffer = () => {
       if (buffer.length > 0) {
@@ -368,57 +359,62 @@ export default function AdminDashboard() {
       const line = lines[i];
       const trimmed = line.trim();
 
-      // A. 新建时的语法 :::lock
+      // A. Explicit mode start (:::lock)
       if (!isLocking && trimmed.startsWith(':::lock')) {
-        flushBuffer(); isLocking = true;
+        flushBuffer(); isLocking = true; lockMode = 'explicit';
         lockPwd = trimmed.replace(':::lock', '').replace(/[>*\s🔒]/g, '').trim();
         continue;
       }
-      if (isLocking && trimmed === ':::') {
-        isLocking = false;
-        const joinedLock = lockBuffer.map(stripMd).join('\n').trim();
-        res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
-        lockBuffer = [];
-        continue;
-      }
 
-      // 🟢 B. Notion 返回的 Markdown 语法 > 🔒 (增强正则)
+      // B. Implicit mode start (> 🔒)
       if (!isLocking && trimmed.match(/^>\s*🔒\s*(\*\*)?LOCK:(.*?)(\*\*)?/)) {
-        flushBuffer(); isLocking = true;
+        flushBuffer(); isLocking = true; lockMode = 'implicit';
         const match = trimmed.match(/LOCK:(.*?)(\*|$)/);
         lockPwd = match ? match[1].trim() : '';
         continue;
       }
       
-      // 🟢 C. 结束条件：非引用行且非空行 -> 结束录制
-      if (isLocking && !trimmed.startsWith('>') && !trimmed.startsWith(':::') && trimmed !== '') {
-         isLocking = false;
-         const joinedLock = lockBuffer.join('\n').trim();
-         res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
-         lockBuffer = [];
-         i--; // 回退一行
-         continue;
-      }
-
+      // End Conditions
       if (isLocking) {
+        // 1. Explicit ends with :::
+        if (lockMode === 'explicit' && trimmed === ':::') {
+           isLocking = false;
+           const joinedLock = lockBuffer.map(stripMd).join('\n').trim();
+           res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
+           lockBuffer = [];
+           continue;
+        }
+        // 2. Implicit ends with non-quote
+        if (lockMode === 'implicit' && !trimmed.startsWith('>') && trimmed !== '') {
+           isLocking = false;
+           const joinedLock = lockBuffer.join('\n').trim();
+           res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
+           lockBuffer = [];
+           i--; // reprocess
+           continue;
+        }
+
+        // Processing content inside lock
         let contentLine = line;
-        // 清洗 Notion 引用前缀
-        if (contentLine.startsWith('> ')) contentLine = contentLine.substring(2);
-        else if (contentLine.startsWith('>')) contentLine = contentLine.substring(1);
+        if (lockMode === 'implicit') {
+            if (contentLine.startsWith('> ')) contentLine = contentLine.substring(2);
+            else if (contentLine.startsWith('>')) contentLine = contentLine.substring(1);
+        }
         if (contentLine.trim() === '---') continue;
         if (contentLine.trim() === '') continue;
         lockBuffer.push(contentLine);
         continue;
       }
 
+      // Normal blocks
       if (trimmed.startsWith('# ')) { flushBuffer(); res.push({ id: Date.now() + Math.random(), type: 'h1', content: trimmed.replace('# ', '') }); continue; }
       if (!trimmed) { flushBuffer(); continue; }
       buffer.push(line);
     }
     
-    // 收尾
+    // Final flush
     if (isLocking) {
-        const joinedLock = lockBuffer.join('\n').trim();
+        const joinedLock = lockMode === 'implicit' ? lockBuffer.join('\n').trim() : lockBuffer.map(stripMd).join('\n').trim();
         res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
     } else {
         flushBuffer();
@@ -427,28 +423,7 @@ export default function AdminDashboard() {
   };
 
   const handlePreview = (p) => { setLoading(true); fetch('/api/admin/post?id='+p.id).then(r=>r.json()).then(d=>{ if(d.success && d.post && d.post.rawBlocks) setPreviewData(d.post); }).finally(()=>setLoading(false)); };
-  
-  // 🟢 修复 Widget 编辑报错：增加容错
-  const handleEdit = (p) => { 
-      setLoading(true); 
-      fetch('/api/admin/post?id='+p.id)
-          .then(r=>r.json())
-          .then(d=>{ 
-              if (d.success) { 
-                  setForm(d.post); 
-                  // 这里加了默认值 ""，防止 trim 报错
-                  setEditorBlocks(parseContentToBlocks(d.post.content || "")); 
-                  setCurrentId(p.id); 
-                  setView('edit'); 
-                  setExpandedStep(1); 
-              } else {
-                  alert("加载失败：" + d.error);
-              }
-          })
-          .catch(e => alert("网络错误"))
-          .finally(()=>setLoading(false)); 
-  };
-  
+  const handleEdit = (p) => { setLoading(true); fetch('/api/admin/post?id='+p.id).then(r=>r.json()).then(d=>{ if (d.success) { setForm(d.post); setEditorBlocks(parseContentToBlocks(d.post.content)); setCurrentId(p.id); setView('edit'); setExpandedStep(1); } }).finally(()=>setLoading(false)); };
   const handleCreate = () => { setForm({ title: '', slug: 'p-'+Date.now().toString(36), excerpt:'', content:'', category:'', tags:'', cover:'', status:'Published', type: 'Post', date: new Date().toISOString().split('T')[0] }); setEditorBlocks([]); setCurrentId(null); setView('edit'); setExpandedStep(1); };
   
   const handleSave = async () => {
@@ -488,6 +463,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleManualDeploy = async () => {
+     if (isDeploying) return;
+     if(confirm('确定要立即更新Blog吗？\n点击确定将立刻开始更新，在完成内容更新前请不要重复提交更新请求！')) {
+        await triggerDeploy();
+        alert('已触发更新！请耐心等待约 1 分钟。');
+     }
+  };
+  
+  const triggerDeploy = async () => {
+    setIsDeploying(true);
+    try { await fetch('/api/admin/deploy'); } catch(e) {}
+    setTimeout(() => setIsDeploying(false), 60000);
+  };
+
   const updateSiteTitle = async () => {
     const newTitle = prompt("请输入新的网站标题:", siteTitle);
     if (newTitle && newTitle !== siteTitle) {
@@ -496,25 +485,9 @@ export default function AdminDashboard() {
     }
   };
 
-  const triggerDeploy = async () => {
-    setIsDeploying(true);
-    try { await fetch('/api/admin/deploy'); } catch(e) {}
-    setTimeout(() => setIsDeploying(false), 60000);
-  };
-
-  const handleManualDeploy = async () => {
-     if (isDeploying) return;
-     if(confirm('确定要立即更新Blog吗？\n点击确定将立刻开始更新，在完成内容更新前请不要重复提交更新请求！')) {
-        await triggerDeploy();
-        alert('已触发更新！请耐心等待约 1 分钟。');
-     }
-  };
-
-  // 🟢 修复 Tags 报错：防空
   const deleteTagOption = (e, tagToDelete) => {
     e.stopPropagation();
-    const tagsStr = form.tags || ""; 
-    const currentTags = tagsStr.split(',').filter(t => t.trim());
+    const currentTags = form.tags ? form.tags.split(',').filter(t => t.trim()) : [];
     const newTags = currentTags.filter(t => t.trim() !== tagToDelete).join(',');
     setForm({ ...form, tags: newTags });
   };
@@ -524,7 +497,6 @@ export default function AdminDashboard() {
   const getFilteredPosts = () => {
      let list = posts.filter(p => {
         if (activeTab === 'Page') return p.type === 'Page' && ['about', 'download'].includes(p.slug);
-        if (activeTab === 'Widget') return p.type === 'Widget';
         return p.type === activeTab;
      });
      if (searchQuery) list = list.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -561,7 +533,6 @@ export default function AdminDashboard() {
              <button onClick={handleManualDeploy} style={{background:'#424242', border: isDeploying ? '1px solid #555' : '1px solid greenyellow', opacity: isDeploying ? 0.5 : 1, padding:'10px', borderRadius:'8px', color: isDeploying ? '#888' : 'greenyellow', cursor: isDeploying ? 'not-allowed' : 'pointer'}} title="立即更新博客前端">
                <Icons.Refresh />
              </button>
-
              <button onClick={() => window.open('https://pan.cloudreve.org/xxx', '_blank')} style={{background:'#a855f7', border:'none', padding:'10px 20px', borderRadius:'8px', color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px', fontWeight:'bold', fontSize:'14px'}} className="btn-ia"><Icons.Tutorial /> 教程</button>
              {view === 'list' ? <AnimatedBtn text="发布新内容" onClick={handleCreate} /> : <AnimatedBtn text="返回列表" onClick={() => setView('list')} />}
            </div>
