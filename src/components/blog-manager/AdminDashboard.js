@@ -21,7 +21,7 @@ const Icons = {
   Tutorial: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
 };
 
-// ================= 2. 全局样式 =================
+// ================= 2. 样式 =================
 const GlobalStyle = () => (
   <style dangerouslySetInnerHTML={{__html: `
     body { background-color: #303030; color: #ffffff; margin: 0; font-family: system-ui, sans-serif; overflow-x: hidden; }
@@ -87,7 +87,7 @@ const GlobalStyle = () => (
     .input:active { transform: scale(0.95); }
     .input:focus { box-shadow: 0 0 0 2.5px #2f303d; }
     .search-icon { position: absolute; left: 1rem; fill: #bdbecb; width: 1rem; height: 1rem; pointer-events: none; z-index: 1; }
-    /* 🟢 修复：底部距离 150px 避开客服 */
+    /* 🟢 修复：悬浮按钮上移至 150px */
     .fab-scroll { position: fixed; right: 30px; bottom: 150px; display: flex; flex-direction: column; gap: 10px; z-index: 99; }
     .fab-btn { width: 45px; height: 45px; background: greenyellow; color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; transition: 0.2s; }
     .fab-btn:hover { transform: scale(1.1); box-shadow: 0 6px 16px rgba(173, 255, 47, 0.4); }
@@ -149,7 +149,7 @@ const FullScreenLoader = () => (
   </div>
 );
 
-// 工具函数：清洗 URL
+// 🟢 修复：trim 报错，增加判空
 const cleanAndFormat = (input) => {
   if (!input) return "";
   try {
@@ -168,12 +168,11 @@ const cleanAndFormat = (input) => {
 };
 
 // ==========================================
-// 4. 积木编辑器 (状态机逻辑 + 视角锁定)
+// 4. 积木编辑器
 // ==========================================
 const BlockBuilder = ({ blocks, setBlocks }) => {
   const [movingId, setMovingId] = useState(null);
 
-  // 视角锁定
   const scrollToBlock = (id) => {
     setTimeout(() => {
        const el = document.getElementById(`block-${id}`);
@@ -303,21 +302,17 @@ export default function AdminDashboard() {
   const [selectedFolder, setSelectedFolder] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   
-  // 编辑器状态
-  const [form, setForm] = useState({ title: '', slug: '', excerpt: '', content: '', category: '', tags: '', cover: '', status: 'Published', type: 'Post', date: '' });
-  const [currentId, setCurrentId] = useState(null);
+  const [form, setForm] = useState({ title: '', slug: '', excerpt: '', content: '', category: '', tags: '', cover: '', status: 'Published', type: 'Post', date: '' }), [currentId, setCurrentId] = useState(null);
   const [siteTitle, setSiteTitle] = useState('PROBLOG');
   const [navIdx, setNavIdx] = useState(1); 
   const [expandedStep, setExpandedStep] = useState(1);
   const [editorBlocks, setEditorBlocks] = useState([]);
   
-  // 🟢 防抖状态锁
   const [isDeploying, setIsDeploying] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
   const isFormValid = form.title.trim() !== '' && form.category.trim() !== '' && form.date !== '';
 
-  // 🛡️ 防崩检查: Fetch
   async function fetchPosts() {
     setLoading(true); 
     try { 
@@ -348,10 +343,9 @@ export default function AdminDashboard() {
     return () => window.removeEventListener('popstate', onPopState);
   }, [view]);
 
-  // 🟢 核心修复：智能解析器 (兼容 Notion 原生 Markdown)
-  // 这段逻辑是 1.0 的灵魂，确保二次编辑时，Notion 的 > 🔒 被正确还原为 :::lock
+  // 🟢 核心修复：状态机解析逻辑 (v1.0 严格版 + 判空保护)
   const parseContentToBlocks = (md) => {
-    if(!md) return [];
+    if(!md) return []; // 防空
     const lines = md.split(/\r?\n/);
     const res = [];
     let buffer = []; let isLocking = false; let lockPwd = ''; let lockBuffer = [];  
@@ -389,7 +383,6 @@ export default function AdminDashboard() {
       }
 
       // 🟢 B. Notion 返回的 Markdown 语法 > 🔒 (增强正则)
-      // 兼容两种格式： > 🔒 **LOCK:123** 和 > 🔒 LOCK:123
       if (!isLocking && trimmed.match(/^>\s*🔒\s*(\*\*)?LOCK:(.*?)(\*\*)?/)) {
         flushBuffer(); isLocking = true;
         const match = trimmed.match(/LOCK:(.*?)(\*|$)/);
@@ -412,7 +405,6 @@ export default function AdminDashboard() {
         // 清洗 Notion 引用前缀
         if (contentLine.startsWith('> ')) contentLine = contentLine.substring(2);
         else if (contentLine.startsWith('>')) contentLine = contentLine.substring(1);
-        
         if (contentLine.trim() === '---') continue;
         if (contentLine.trim() === '') continue;
         lockBuffer.push(contentLine);
@@ -436,7 +428,7 @@ export default function AdminDashboard() {
 
   const handlePreview = (p) => { setLoading(true); fetch('/api/admin/post?id='+p.id).then(r=>r.json()).then(d=>{ if(d.success && d.post && d.post.rawBlocks) setPreviewData(d.post); }).finally(()=>setLoading(false)); };
   
-  // 🟢 修复 Widget 编辑：点击 Edit 没反应
+  // 🟢 修复 Widget 编辑报错：增加容错
   const handleEdit = (p) => { 
       setLoading(true); 
       fetch('/api/admin/post?id='+p.id)
@@ -444,7 +436,8 @@ export default function AdminDashboard() {
           .then(d=>{ 
               if (d.success) { 
                   setForm(d.post); 
-                  setEditorBlocks(parseContentToBlocks(d.post.content)); 
+                  // 这里加了默认值 ""，防止 trim 报错
+                  setEditorBlocks(parseContentToBlocks(d.post.content || "")); 
                   setCurrentId(p.id); 
                   setView('edit'); 
                   setExpandedStep(1); 
@@ -517,9 +510,11 @@ export default function AdminDashboard() {
      }
   };
 
+  // 🟢 修复 Tags 报错：防空
   const deleteTagOption = (e, tagToDelete) => {
     e.stopPropagation();
-    const currentTags = form.tags ? form.tags.split(',').filter(t => t.trim()) : [];
+    const tagsStr = form.tags || ""; 
+    const currentTags = tagsStr.split(',').filter(t => t.trim());
     const newTags = currentTags.filter(t => t.trim() !== tagToDelete).join(',');
     setForm({ ...form, tags: newTags });
   };
@@ -529,7 +524,6 @@ export default function AdminDashboard() {
   const getFilteredPosts = () => {
      let list = posts.filter(p => {
         if (activeTab === 'Page') return p.type === 'Page' && ['about', 'download'].includes(p.slug);
-        // 🟢 修复 Widget 列表筛选
         if (activeTab === 'Widget') return p.type === 'Widget';
         return p.type === activeTab;
      });
@@ -564,7 +558,6 @@ export default function AdminDashboard() {
            </div>
            
            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-             {/* 🟢 更新按钮 (仅图标) */}
              <button onClick={handleManualDeploy} style={{background:'#424242', border: isDeploying ? '1px solid #555' : '1px solid greenyellow', opacity: isDeploying ? 0.5 : 1, padding:'10px', borderRadius:'8px', color: isDeploying ? '#888' : 'greenyellow', cursor: isDeploying ? 'not-allowed' : 'pointer'}} title="立即更新博客前端">
                <Icons.Refresh />
              </button>

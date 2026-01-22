@@ -8,7 +8,7 @@ const n2m = new NotionToMarkdown({ notionClient: notion });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// === 1. 强力解析器 (保留 v1.0) ===
+// === 1. 解析器 ===
 function parseLinesToChildren(text) {
   const lines = text.split(/\r?\n/);
   const blocks = [];
@@ -34,7 +34,7 @@ function parseLinesToChildren(text) {
   return blocks;
 }
 
-// === 2. 积木转换器 (保留 v1.0) ===
+// === 2. 转换器 ===
 function mdToBlocks(markdown) {
   if (!markdown) return [];
   const rawChunks = markdown.split(/\n{2,}/);
@@ -75,13 +75,13 @@ export default async function handler(req, res) {
   const databaseId = process.env.NOTION_DATABASE_ID || process.env.NOTION_PAGE_ID;
 
   try {
-    // === GET: 获取详情 ===
+    // === GET ===
     if (req.method === 'GET') {
       const page = await notion.pages.retrieve({ page_id: id });
       const mdblocks = await n2m.pageToMarkdown(id);
       const p = page.properties;
       
-      // ✅ 保留 v1.0 翻译逻辑：Callout -> :::lock
+      // 🔥 核心修复：翻译逻辑回归，防止加密块炸裂
       mdblocks.forEach(b => {
         if (b.type === 'callout' && b.parent.includes('LOCK:')) {
           const pwdMatch = b.parent.match(/LOCK:(.*?)(\n|$)/);
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
       let rawBlocks = [];
       try { const blocksRes = await notion.blocks.children.list({ block_id: id }); rawBlocks = blocksRes.results; } catch (e) {}
 
-      // ✅ 修复 Widget 编辑：增加大量 ?. 判空，防止因缺少字段导致 API 500
+      // 🔥 核心修复：Widget 字段防空保护
       return res.status(200).json({
         success: true,
         post: {
@@ -105,7 +105,7 @@ export default async function handler(req, res) {
           title: p.title?.title?.[0]?.plain_text || '无标题',
           slug: p.slug?.rich_text?.[0]?.plain_text || '',
           excerpt: p.excerpt?.rich_text?.[0]?.plain_text || '',
-          category: p.category?.select?.name || '', // 即使是 null 也会返回空字符串
+          category: p.category?.select?.name || '', // Widget 可能无分类，给默认空
           tags: (p.tags?.multi_select || []).map(t => t.name).join(','),
           status: p.status?.status?.name || p.status?.select?.name || 'Published',
           type: p.type?.select?.name || 'Post',
@@ -117,7 +117,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // === POST: 保存 ===
+    // === POST ===
     if (req.method === 'POST') {
       const body = JSON.parse(req.body);
       const { id, title, content, slug, excerpt, category, tags, status, date, type, cover } = body;
@@ -133,21 +133,19 @@ export default async function handler(req, res) {
         const tagList = tags.split(',').filter(t => t.trim()).map(t => ({ name: t.trim() }));
         if (tagList.length > 0) props["tags"] = { multi_select: tagList };
       }
-      props["status"] = { status: { name: status || "Published" } }; // 适配 Status 类型
+      props["status"] = { status: { name: status || "Published" } };
       props["type"] = { select: { name: type || "Post" } };
       if (date) props["date"] = { date: { start: date } };
       if (cover && cover.startsWith('http')) props["cover"] = { url: cover };
 
       if (id) {
         await notion.pages.update({ page_id: id, properties: props });
-        // 极速删除
         const children = await notion.blocks.children.list({ block_id: id });
         if (children.results.length > 0) {
             const chunks = [];
             for (let i = 0; i < children.results.length; i += 3) chunks.push(children.results.slice(i, i + 3));
             for (const chunk of chunks) await Promise.all(chunk.map(b => notion.blocks.delete({ block_id: b.id })));
         }
-        // 极速写入
         for (let i = 0; i < newBlocks.length; i += 100) {
           await notion.blocks.children.append({ block_id: id, children: newBlocks.slice(i, i + 100) });
           if (i + 100 < newBlocks.length) await sleep(100); 
@@ -162,6 +160,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
+    // === DELETE ===
     if (req.method === 'DELETE') {
       await notion.pages.update({ page_id: id, archived: true });
       return res.status(200).json({ success: true });

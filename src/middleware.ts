@@ -4,19 +4,17 @@ import type { NextRequest } from 'next/server'
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // 🛡️ 核心修复：路径白名单
-  // 如果路径不是以 /admin 开头，直接放行，绝对不弹窗
+  // 🛡️ 核心修复：绝对白名单
+  // 只要路径不是以 /admin 开头，直接放行，绝不弹窗
   if (!pathname.startsWith('/admin')) {
     return NextResponse.next()
   }
 
-  // --- 以下是 Admin 区域的鉴权逻辑 ---
-  
+  // --- Admin 区域鉴权 ---
   const basicAuth = req.headers.get('authorization')
 
   if (basicAuth) {
     const authValue = basicAuth.split(' ')[1]
-    // 防止 base64 解析报错
     try {
       const [user, pwd] = atob(authValue).split(':')
       const validUser = process.env.AUTH_USER || 'admin'
@@ -26,12 +24,11 @@ export function middleware(req: NextRequest) {
         return NextResponse.next()
       }
     } catch (e) {
-      // 解析失败视为未登录
+      // 忽略解析错误
     }
   }
 
-  // 验证失败，返回 401 并弹出登录框
-  // Body 必须为 null 以兼容 Edge Runtime
+  // 验证失败：Body 必须为 null
   return new NextResponse(null, {
     status: 401,
     headers: {
@@ -40,11 +37,7 @@ export function middleware(req: NextRequest) {
   })
 }
 
-// 匹配器配置
 export const config = {
-  matcher: [
-    // 只匹配 admin 路径
-    '/admin', 
-    '/admin/:path*'
-  ],
+  // 仅匹配 admin 相关路径
+  matcher: ['/admin', '/admin/:path*'],
 }
