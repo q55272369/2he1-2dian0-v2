@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 
-// ================= 1. 图标库 (保持 v1.0 原样) =================
+// ================= 1. 图标库 =================
 const Icons = {
   Search: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
   Edit: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4L18.5 2.5z"></path></svg>,
@@ -21,7 +21,7 @@ const Icons = {
   Tutorial: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
 };
 
-// ================= 2. 样式 & 辅助组件 (保持 v1.0 原样) =================
+// ================= 2. 全局样式 =================
 const GlobalStyle = () => (
   <style dangerouslySetInnerHTML={{__html: `
     body { background-color: #303030; color: #ffffff; margin: 0; font-family: system-ui, sans-serif; overflow-x: hidden; }
@@ -87,8 +87,8 @@ const GlobalStyle = () => (
     .input:active { transform: scale(0.95); }
     .input:focus { box-shadow: 0 0 0 2.5px #2f303d; }
     .search-icon { position: absolute; left: 1rem; fill: #bdbecb; width: 1rem; height: 1rem; pointer-events: none; z-index: 1; }
-    /* 🟢 修复1：悬浮按钮上移至 120px */
-    .fab-scroll { position: fixed; right: 30px; bottom: 120px; display: flex; flex-direction: column; gap: 10px; z-index: 99; }
+    /* 🟢 修复：悬浮按钮上移至 150px */
+    .fab-scroll { position: fixed; right: 30px; bottom: 150px; display: flex; flex-direction: column; gap: 10px; z-index: 99; }
     .fab-btn { width: 45px; height: 45px; background: greenyellow; color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; transition: 0.2s; }
     .fab-btn:hover { transform: scale(1.1); box-shadow: 0 6px 16px rgba(173, 255, 47, 0.4); }
     .btn-disabled { opacity: 0.5; cursor: not-allowed; }
@@ -173,12 +173,16 @@ const cleanAndFormat = (input) => {
 const BlockBuilder = ({ blocks, setBlocks }) => {
   const [movingId, setMovingId] = useState(null);
 
-  // 视角锁定
+  // 🟢 修复：指定在 admin-container 容器内滚动
   const scrollToBlock = (id) => {
     setTimeout(() => {
        const el = document.getElementById(`block-${id}`);
-       // 🟢 修复2：修正为 admin-container，确保在固定容器内滚动生效
-       if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+       const container = document.getElementById('admin-container');
+       if(el && container) {
+          // 计算相对位置进行滚动
+          const top = el.offsetTop - container.offsetTop;
+          container.scrollTo({ top, behavior: 'smooth' });
+       }
     }, 100);
   };
 
@@ -304,20 +308,17 @@ export default function AdminDashboard() {
   const [selectedFolder, setSelectedFolder] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   
-  // 编辑器状态
   const [form, setForm] = useState({ title: '', slug: '', excerpt: '', content: '', category: '', tags: '', cover: '', status: 'Published', type: 'Post', date: '' }), [currentId, setCurrentId] = useState(null);
   const [siteTitle, setSiteTitle] = useState('PROBLOG');
   const [navIdx, setNavIdx] = useState(1); 
   const [expandedStep, setExpandedStep] = useState(1);
   const [editorBlocks, setEditorBlocks] = useState([]);
   
-  // 🟢 防抖状态锁
   const [isDeploying, setIsDeploying] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
   const isFormValid = form.title.trim() !== '' && form.category.trim() !== '' && form.date !== '';
 
-  // 🛡️ 防崩检查: Fetch
   async function fetchPosts() {
     setLoading(true); 
     try { 
@@ -336,7 +337,6 @@ export default function AdminDashboard() {
   }
   useEffect(() => { if (mounted) fetchPosts(); }, [mounted]);
 
-  // 后退逻辑
   useEffect(() => {
     if (view === 'edit') {
       window.history.pushState({ view: 'edit' }, '', '?mode=edit');
@@ -348,16 +348,13 @@ export default function AdminDashboard() {
     return () => window.removeEventListener('popstate', onPopState);
   }, [view]);
 
-  // 🟢 核心修复：v1.0 双模状态机解析 (兼容 :::lock 和 > 🔒)
+  // 🟢 核心修复：v1.0 双模状态机解析
   const parseContentToBlocks = (md) => {
     if(!md) return [];
     const lines = md.split(/\r?\n/);
     const res = [];
-    let buffer = []; 
-    let isLocking = false; 
-    let lockPwd = ''; 
-    let lockBuffer = [];  
-    let lockMode = null; // 'explicit' (:::) or 'implicit' (>)
+    let buffer = []; let isLocking = false; let lockPwd = ''; let lockBuffer = [];  
+    let lockMode = null;
 
     const stripMd = (str) => { const match = str.match(/(?:!|)?\[.*?\]\((.*?)\)/); return match ? match[1] : str; };
     const flushBuffer = () => {
@@ -378,14 +375,12 @@ export default function AdminDashboard() {
       const line = lines[i];
       const trimmed = line.trim();
 
-      // A. Explicit mode start (:::lock)
       if (!isLocking && trimmed.startsWith(':::lock')) {
         flushBuffer(); isLocking = true; lockMode = 'explicit';
         lockPwd = trimmed.replace(':::lock', '').replace(/[>*\s🔒]/g, '').trim();
         continue;
       }
 
-      // B. Implicit mode start (> 🔒)
       if (!isLocking && trimmed.match(/^>\s*🔒\s*(\*\*)?LOCK:(.*?)(\*\*)?/)) {
         flushBuffer(); isLocking = true; lockMode = 'implicit';
         const match = trimmed.match(/LOCK:(.*?)(\*|$)/);
@@ -393,9 +388,7 @@ export default function AdminDashboard() {
         continue;
       }
       
-      // End Conditions
       if (isLocking) {
-        // 1. Explicit ends with :::
         if (lockMode === 'explicit' && trimmed === ':::') {
            isLocking = false;
            const joinedLock = lockBuffer.map(stripMd).join('\n').trim();
@@ -403,17 +396,15 @@ export default function AdminDashboard() {
            lockBuffer = [];
            continue;
         }
-        // 2. Implicit ends with non-quote
         if (lockMode === 'implicit' && !trimmed.startsWith('>') && trimmed !== '') {
            isLocking = false;
            const joinedLock = lockBuffer.join('\n').trim();
            res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
            lockBuffer = [];
-           i--; // reprocess
+           i--;
            continue;
         }
 
-        // Processing content inside lock
         let contentLine = line;
         if (lockMode === 'implicit') {
             if (contentLine.startsWith('> ')) contentLine = contentLine.substring(2);
@@ -425,13 +416,11 @@ export default function AdminDashboard() {
         continue;
       }
 
-      // Normal blocks
       if (trimmed.startsWith('# ')) { flushBuffer(); res.push({ id: Date.now() + Math.random(), type: 'h1', content: trimmed.replace('# ', '') }); continue; }
       if (!trimmed) { flushBuffer(); continue; }
       buffer.push(line);
     }
     
-    // Final flush
     if (isLocking) {
         const joinedLock = lockMode === 'implicit' ? lockBuffer.join('\n').trim() : lockBuffer.map(stripMd).join('\n').trim();
         res.push({ id: Date.now() + Math.random(), type: 'lock', pwd: lockPwd, content: joinedLock });
@@ -471,8 +460,7 @@ export default function AdminDashboard() {
         alert(`❌ 保存失败！\n\n错误信息:\n${d.error}`);
       } else {
         alert("✅ 保存成功！");
-        // 🟢 修复3：移除自动更新触发，仅保留手动按钮触发
-        // try { await fetch('/api/admin/deploy'); } catch(e) {} 
+        // 🟢 修复：不再自动触发 Deploy Hook
         setView('list');
         fetchPosts();
       }
@@ -483,7 +471,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🟢 修复4：更新确认文案
   const handleManualDeploy = async () => {
      if (isDeploying) return;
      if(confirm('确定要立即更新Blog吗？\n点击确定将立刻开始更新，在完成内容更新前请不要重复提交更新请求！')) {
@@ -551,7 +538,6 @@ export default function AdminDashboard() {
            </div>
            
            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-             {/* 🟢 修复5：仅图标更新按钮 */}
              <button onClick={handleManualDeploy} style={{background:'#424242', border: isDeploying ? '1px solid #555' : '1px solid greenyellow', opacity: isDeploying ? 0.5 : 1, padding:'10px', borderRadius:'8px', color: isDeploying ? '#888' : 'greenyellow', cursor: isDeploying ? 'not-allowed' : 'pointer'}} title="立即更新博客前端">
                <Icons.Refresh />
              </button>
@@ -607,10 +593,9 @@ export default function AdminDashboard() {
             </StepAccordion>
             <BlockBuilder blocks={editorBlocks} setBlocks={setEditorBlocks} />
             
-            {/* 🟢 修复2：悬浮按钮上移至 120px，避开客服组件 */}
             <div className="fab-scroll">
-              <div className="fab-btn" onClick={() => window.scrollTo({top:0, behavior:'smooth'})}><Icons.ArrowUp /></div>
-              <div className="fab-btn" onClick={() => window.scrollTo({top:99999, behavior:'smooth'})}><Icons.ArrowDown /></div>
+              <div className="fab-btn" onClick={() => { const el = document.getElementById('admin-container'); if(el) el.scrollTo({top:0, behavior:'smooth'}); }}><Icons.ArrowUp /></div>
+              <div className="fab-btn" onClick={() => { const el = document.getElementById('admin-container'); if(el) el.scrollTo({top:99999, behavior:'smooth'}); }}><Icons.ArrowDown /></div>
             </div>
 
             <button onClick={handleSave} disabled={!isFormValid} style={{width:'100%', padding:'20px', background:isFormValid?'#fff':'#222', color:isFormValid?'#000':'#666', border:'none', borderRadius:'12px', fontWeight:'bold', fontSize:'16px', marginTop:'40px', cursor:isFormValid?'pointer':'not-allowed', transition:'0.3s'}}>{currentId ? '保存修改' : '确认发布'}</button>
