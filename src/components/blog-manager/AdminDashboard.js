@@ -473,7 +473,7 @@ export default function AdminDashboard() {
      if (isDeploying) return;
      if(confirm('确定要立即更新Blog吗？\n点击确定将立刻开始更新，在完成内容更新前请不要重复提交更新请求！')) {
         await triggerDeploy();
-        alert('已触发更新！请耐心等待约 1 分钟。');
+        alert('已触发更新！请耐心等待，在完成内容更新前请不要重复提交。');
      }
   };
   
@@ -569,7 +569,7 @@ export default function AdminDashboard() {
                      style={activeTab === t ? {padding:'8px 20px', border:'none', background:'#555', color:'#fff', borderRadius:'10px', fontWeight:'bold', fontSize:'13px', cursor:'pointer'} : {padding:'8px 20px', border:'none', background:'none', color:'#888', borderRadius:'10px', fontWeight:'bold', fontSize:'13px', cursor:'pointer'}}
                    >
                      {/* 标签名称映射 */}
-                     {t === 'Page' ? '自定义页面' : t === 'Post' ? '已发布' : t === 'Draft' ? '草稿' : '组件'}
+                     {t === 'Page' ? '页面' : t === 'Post' ? '已发布' : t === 'Draft' ? '草稿' : '组件'}
                    </button>
                  ))}
                </div>
